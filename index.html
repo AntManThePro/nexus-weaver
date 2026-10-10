@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>NEXUS Weaver v1 // DoubleA</title>
+<meta name="description" content="NEXUS Weaver — a live hardware/software dataflow weaver with kernel injection and a visual training loop. By DoubleA (@AntManThePro)." />
+<!-- Tailwind Play CDN (needs network). Critical layout CSS is inlined below so the app degrades gracefully offline. -->
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   CRITICAL / SELF-CONTAINED CSS
+   Everything the layout needs even if the Tailwind CDN fails.
+   ============================================================ */
+:root{
+  --neon:#00ff87; --cyan:#60efff; --pink:#ff0080; --yellow:#ffcc00;
+  --bg0:#0a0a0f; --bg1:#000000; --panel:rgba(10,10,15,.82); --line:rgba(0,255,135,.22);
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:var(--bg1);color:#e6ffef;font-family:var(--mono);-webkit-font-smoothing:antialiased}
+#app{position:fixed;inset:0;overflow:hidden}
+canvas#stage{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;background:
+  radial-gradient(1200px 800px at 30% 20%, rgba(0,255,135,.05), transparent 60%),
+  radial-gradient(1000px 700px at 80% 90%, rgba(96,239,255,.05), transparent 60%),
+  var(--bg0);}
+.panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);box-shadow:0 0 24px rgba(0,255,135,.10),inset 0 0 22px rgba(0,0,0,.55)}
+.panel h2{font-size:11px;letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--neon);text-shadow:0 0 8px rgba(0,255,135,.6)}
+.hdr{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--line)}
+.body{padding:10px 11px}
+.btn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.06em;cursor:pointer;user-select:none;
+  padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:rgba(0,255,135,.06);color:var(--neon);
+  text-shadow:0 0 6px rgba(0,255,135,.5);transition:transform .06s ease,background .15s ease,box-shadow .15s ease}
+.btn:hover{background:rgba(0,255,135,.14);box-shadow:0 0 14px rgba(0,255,135,.35)}
+.btn:active{transform:translateY(1px) scale(.98)}
+.btn.cyan{color:var(--cyan);border-color:rgba(96,239,255,.3);background:rgba(96,239,255,.06);text-shadow:0 0 6px rgba(96,239,255,.5)}
+.btn.cyan:hover{background:rgba(96,239,255,.14);box-shadow:0 0 14px rgba(96,239,255,.35)}
+.btn.pink{color:var(--pink);border-color:rgba(255,0,128,.34);background:rgba(255,0,128,.07);text-shadow:0 0 6px rgba(255,0,128,.5)}
+.btn.pink:hover{background:rgba(255,0,128,.16);box-shadow:0 0 14px rgba(255,0,128,.4)}
+.btn.yellow{color:var(--yellow);border-color:rgba(255,204,0,.34);background:rgba(255,204,0,.07);text-shadow:0 0 6px rgba(255,204,0,.5)}
+.btn.on{background:rgba(0,255,135,.22);box-shadow:0 0 16px rgba(0,255,135,.5)}
+.btn.pink.on{background:rgba(255,0,128,.28);box-shadow:0 0 16px rgba(255,0,128,.55)}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.metric{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:11px;padding:2px 0}
+.metric .k{color:#7fffc4;opacity:.8;letter-spacing:.05em}
+.metric .v{font-weight:800;font-variant-numeric:tabular-nums}
+.tiny{font-size:9.5px;letter-spacing:.05em;opacity:.7}
+select,textarea,input[type=range]{font-family:var(--mono)}
+#app select{font-family:var(--mono);line-height:1.2;background:#05060a;color:var(--cyan);border:1px solid var(--line);border-radius:6px;padding:5px 6px;font-size:11px}
+input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:3px;background:linear-gradient(90deg,var(--neon),var(--cyan));outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--yellow);box-shadow:0 0 8px var(--yellow);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border:none;border-radius:50%;background:var(--yellow);box-shadow:0 0 8px var(--yellow);cursor:pointer}
+/* Left panel */
+#leftPanel{top:14px;left:14px;width:246px;max-height:calc(100% - 262px);overflow:auto}
+/* Right panel (kernel + deploy) */
+#rightPanel{top:14px;right:14px;width:340px;max-height:calc(100% - 300px);overflow:auto}
+/* HUD bottom-left metrics */
+#hud{left:14px;bottom:14px;width:246px}
+/* Loss inset */
+#lossPanel{right:14px;bottom:14px;width:340px}
+#lossCanvas,#lpCanvas{display:block;border-radius:8px;background:#05060a}
+.sparkWrap{margin-top:6px}
+/* Kernel editor */
+.editorWrap{position:relative;display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#04050a}
+.gutter{white-space:pre;font-family:var(--mono);padding:8px 6px;text-align:right;color:#2f7d5c;font-size:11px;line-height:1.5;user-select:none;background:#03040700;border-right:1px solid var(--line);min-width:30px}
+#app #kernelSrc{font-family:var(--mono);flex:1;min-height:150px;max-height:230px;resize:vertical;border:none;outline:none;background:transparent;color:#c8ffe6;
+  font-size:11.5px;line-height:1.5;padding:8px 8px;white-space:pre;overflow:auto;tab-size:2}
+#console{margin-top:8px;font-size:10.5px;border-radius:8px;border:1px solid var(--line);background:#04050a;padding:7px 8px;max-height:78px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.c-ok{color:var(--neon)} .c-err{color:var(--pink)} .c-warn{color:var(--yellow)} .c-dim{color:#5aa588}
+/* Corner tag */
+#tag{position:absolute;top:14px;left:50%;transform:translateX(-50%);font-size:11px;letter-spacing:.28em;color:var(--neon);
+  text-shadow:0 0 10px rgba(0,255,135,.7);pointer-events:none;opacity:.9;font-weight:700}
+#tag b{color:var(--cyan);text-shadow:0 0 10px rgba(96,239,255,.7)}
+/* Toast */
+#toast{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(0,255,135,.14);border:1px solid var(--line);
+  color:var(--neon);padding:8px 14px;border-radius:8px;font-size:11px;letter-spacing:.06em;opacity:0;transition:opacity .25s ease;pointer-events:none;text-shadow:0 0 8px rgba(0,255,135,.6);z-index:60}
+#toast.show{opacity:1}
+/* Boot overlay */
+#boot{position:absolute;inset:0;background:#000;z-index:100;display:flex;flex-direction:column;justify-content:center;padding:0 8vw;gap:4px;
+  font-size:13px;color:var(--neon);text-shadow:0 0 8px rgba(0,255,135,.6)}
+#boot .bl{opacity:0}
+#boot .skip{position:absolute;bottom:22px;right:26px;font-size:11px;color:var(--cyan);cursor:pointer;opacity:.8;letter-spacing:.1em}
+#boot .big{font-size:26px;font-weight:800;letter-spacing:.22em;margin-bottom:10px;color:var(--neon)}
+#boot .big b{color:var(--pink)}
+/* Screen flash for overflow */
+#flash{position:absolute;inset:0;background:radial-gradient(circle,rgba(255,0,128,.35),rgba(255,0,128,0) 70%);opacity:0;pointer-events:none;z-index:40;transition:opacity .12s ease}
+#flash.show{opacity:1}
+.shake{animation:shake .32s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes shake{10%,90%{transform:translate(-1px,0)}20%,80%{transform:translate(2px,0)}30%,50%,70%{transform:translate(-4px,0)}40%,60%{transform:translate(4px,0)}}
+/* Add-node palette */
+#palette{position:absolute;z-index:55;display:none;flex-direction:column;gap:3px;padding:6px;min-width:150px}
+#palette .pi{font-size:11px;padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:10px}
+#palette .pi:hover{background:rgba(0,255,135,.12)}
+#palette .pi .kbd{opacity:.6;font-size:9px}
+/* Mobile tab bar + bottom sheet */
+#tabbar{display:none}
+#mTrain{display:none;position:fixed;top:30px;right:10px;z-index:50}
+#sheetToggle{display:none}
+@media (max-width:760px){
+  #leftPanel,#rightPanel,#hud,#lossPanel{position:fixed;left:0;right:0;top:auto;bottom:52px;width:100%;max-width:100%;
+    max-height:52vh !important;border-radius:14px 14px 0 0;overflow:auto;border-bottom:none;display:none;z-index:45}
+  .panel.sheet-active{display:block !important}
+  #mTrain{display:block}
+  #hud{bottom:52px}
+  #tag{top:8px;font-size:10px;letter-spacing:.18em}
+  #tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;height:52px;z-index:70;background:rgba(4,5,10,.96);
+    border-top:1px solid var(--line);align-items:stretch}
+  #tabbar .tb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9px;
+    letter-spacing:.08em;color:#5aa588;cursor:pointer;border-right:1px solid rgba(0,255,135,.12)}
+  #tabbar .tb .ic{font-size:15px}
+  #tabbar .tb.active{color:var(--neon);text-shadow:0 0 8px rgba(0,255,135,.6);background:rgba(0,255,135,.08)}
+  #rightPanel{width:100%}
+  #kernelSrc{min-height:120px}
+}
+/* Scrollbars */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:rgba(0,255,135,.25);border-radius:6px}
+::-webkit-scrollbar-track{background:transparent}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="stage"></canvas>
+
+  <div id="tag">WEAVER <b>//</b> DoubleA</div>
+
+  <!-- ===================== LEFT PANEL: graph + viewport ===================== -->
+  <div id="leftPanel" class="panel" data-sheet="build">
+    <div class="hdr"><h2>◧ Weaver</h2><span class="tiny" style="margin-left:auto">sim &amp; graph</span></div>
+    <div class="body">
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn" id="btnPause" title="Space">⏸ PAUSE</button>
+        <button class="btn pink" id="btnTrain" title="T">▲ TRAIN</button>
+        <button class="btn cyan" id="btnFit" title="F">⤢ FIT</button>
+      </div>
+      <div class="tiny" style="margin-bottom:4px">ADD NODE <span style="opacity:.6">(keys 1-4)</span></div>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn cyan" data-add="INPUT">1 · INPUT</button>
+        <button class="btn" data-add="COMPUTE">2 · COMPUTE</button>
+        <button class="btn yellow" data-add="MEMORY">3 · MEMORY</button>
+        <button class="btn pink" data-add="OUTPUT">4 · OUTPUT</button>
+      </div>
+      <div id="inspector" class="tiny" style="border-top:1px solid var(--line);padding-top:8px;margin-top:2px">
+        <div class="c-dim">Select a node or bus to inspect. Drag from an output port (right) to an input port (left) to link. Delete key removes selection.</div>
+      </div>
+      <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
+        <div class="tiny" style="margin-bottom:6px">OUTPUT THROUGHPUT TARGETS <span class="c-dim">(train objective)</span></div>
+        <div id="targets"></div>
+      </div>
+      <div style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px">
+        <label class="metric"><span class="k">Learning rate</span><span class="v" id="lrVal">0.06</span></label>
+        <input type="range" id="lr" min="0.005" max="0.25" step="0.005" value="0.06" style="width:100%" />
+        <label class="metric" style="margin-top:6px"><span class="k">Spawn rate</span><span class="v" id="spawnVal">1.0x</span></label>
+        <input type="range" id="spawn" min="0.1" max="3" step="0.1" value="1" style="width:100%" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== RIGHT PANEL: kernel + deploy ===================== -->
+  <div id="rightPanel" class="panel" data-sheet="kernel">
+    <div class="hdr"><h2>⌘ Kernel Injection</h2><span class="tiny" style="margin-left:auto">customKernel()</span></div>
+    <div class="body">
+      <div class="row" style="margin-bottom:6px">
+        <select id="presetSel" title="preset kernels">
+          <option value="passthrough">passthrough</option>
+          <option value="relu">ReLU clamp</option>
+          <option value="jitter">jitter / fuzz (QA stress)</option>
+          <option value="hidboost">priority boost · HID payload</option>
+        </select>
+        <button class="btn" id="btnReload" title="Ctrl/Cmd+Enter">⟳ HOT RELOAD</button>
+      </div>
+      <div class="tiny c-dim" style="margin-bottom:5px">function customKernel(p, node, t) { … } — mutate p.value / p.hue / p.speed, set p.drop=true to kill.</div>
+      <div class="editorWrap">
+        <div class="gutter" id="gutter">1</div>
+        <textarea id="kernelSrc" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+      </div>
+      <div id="console"><span class="c-dim">// kernel console — compile &amp; runtime errors show here</span></div>
+
+      <div class="hdr" style="margin:12px -11px 0;border-top:1px solid var(--line)"><h2>⇩ Compile &amp; Deploy</h2></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn cyan" id="btnCompile">◆ COMPILE TO PAYLOAD</button>
+        <button class="btn" id="btnShare">🔗 SHARE</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <select id="payloadKind">
+          <option value="json">graph JSON (pretty)</option>
+          <option value="js">standalone JS (createNexusGraph)</option>
+          <option value="step">pure step(state,dt) fn</option>
+        </select>
+        <button class="btn" id="btnCopy">⧉ COPY</button>
+        <button class="btn yellow" id="btnDownload">⇩ JSON</button>
+      </div>
+      <textarea id="payloadOut" spellcheck="false" style="width:100%;margin-top:6px;height:120px;background:#04050a;color:#9effd0;border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:10px;line-height:1.45;padding:8px;white-space:pre;overflow:auto" placeholder="// COMPILE TO PAYLOAD output appears here"></textarea>
+    </div>
+  </div>
+
+  <!-- ===================== HUD: live metrics ===================== -->
+  <div id="hud" class="panel" data-sheet="metrics">
+    <div class="hdr"><h2>◉ Telemetry</h2><span class="tiny c-warn" style="margin-left:auto">simulated</span></div>
+    <div class="body">
+      <div class="metric"><span class="k">Loss</span><span class="v" id="mLoss" style="color:var(--pink)">—</span></div>
+      <div class="metric"><span class="k">Throughput</span><span class="v" id="mThru" style="color:var(--neon)">—</span></div>
+      <div class="metric"><span class="k">Error rate (drops)</span><span class="v" id="mErr" style="color:var(--yellow)">—</span></div>
+      <div class="metric"><span class="k">Stability</span><span class="v" id="mStab" style="color:var(--cyan)">—</span></div>
+      <div class="metric"><span class="k">Power draw</span><span class="v" id="mPwr" style="color:var(--yellow)">—</span></div>
+      <div class="metric"><span class="k">Particles / pool</span><span class="v" id="mPart" style="color:var(--cyan)">—</span></div>
+      <div class="metric"><span class="k">Epoch · FPS</span><span class="v" id="mFps">—</span></div>
+    </div>
+  </div>
+
+  <!-- ===================== LOSS INSET ===================== -->
+  <div id="lossPanel" class="panel" data-sheet="loss">
+    <div class="hdr"><h2>◭ Loss Landscape</h2><span class="tiny c-dim" id="lossAxes" style="margin-left:auto">2-weight slice</span></div>
+    <div class="body" style="padding:8px">
+      <canvas id="lpCanvas" width="324" height="130" style="width:100%;height:auto"></canvas>
+      <div class="sparkWrap">
+        <div class="tiny c-dim" style="margin-bottom:2px">loss / epoch</div>
+        <canvas id="lossCanvas" width="324" height="40" style="width:100%;height:auto"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add-node palette (double-click) -->
+  <div id="palette" class="panel">
+    <div class="pi" data-add="INPUT"><span class="c-dim" style="color:var(--cyan)">＋ INPUT</span><span class="kbd">1</span></div>
+    <div class="pi" data-add="COMPUTE"><span style="color:var(--neon)">＋ COMPUTE</span><span class="kbd">2</span></div>
+    <div class="pi" data-add="MEMORY"><span style="color:var(--yellow)">＋ MEMORY</span><span class="kbd">3</span></div>
+    <div class="pi" data-add="OUTPUT"><span style="color:var(--pink)">＋ OUTPUT</span><span class="kbd">4</span></div>
+  </div>
+
+  <div id="flash"></div>
+  <div id="toast"></div>
+
+  <button class="btn pink" id="mTrain" title="T">▲ TRAIN</button>
+  <!-- Mobile tab bar -->
+  <div id="tabbar">
+    <div class="tb" data-tab="canvas"><span class="ic">◇</span><span>CANVAS</span></div>
+    <div class="tb" data-tab="build"><span class="ic">◧</span><span>BUILD</span></div>
+    <div class="tb" data-tab="kernel"><span class="ic">⌘</span><span>KERNEL</span></div>
+    <div class="tb" data-tab="metrics"><span class="ic">◉</span><span>STATS</span></div>
+    <div class="tb" data-tab="loss"><span class="ic">◭</span><span>LOSS</span></div>
+  </div>
+
+  <!-- Boot overlay -->
+  <div id="boot">
+    <div class="big">NEXUS <b>WEAVER</b></div>
+    <div class="bl">&gt; init nexus-weaver core v1.0.0 ...</div>
+    <div class="bl">&gt; mapping hardware bus fabric [IMU · MIC · RF-SDR] ok</div>
+    <div class="bl">&gt; spinning compute lanes CPU/GPU/TPU ... ok</div>
+    <div class="bl">&gt; allocating particle pool 4096 slots ... ok</div>
+    <div class="bl">&gt; arming actuators SERVO · LED-MATRIX · HID-PAYLOAD ... ok</div>
+    <div class="bl c-cyanx" style="color:var(--cyan)">&gt; weaver online. hello, DoubleA.</div>
+    <div class="skip" id="bootSkip">[ skip ▸ ]</div>
+  </div>
+</div>
+<script>
+/* ============================================================================
+   NEXUS WEAVER v1  —  hardware/software dataflow weaver
+   by DoubleA (@AntManThePro).  Single-file, vanilla JS + Canvas 2D.
+
+   SECTIONS
+     0. Constants & palette
+     1. Neon draw utils (multi-pass glow)          [mirrors lib/neon.js]
+     2. Particle object pool                        [mirrors lib/particle-pool.js]
+     3. Graph model (nodes / buses) + default scene
+     4. Kernel injection (guarded new Function)
+     5. Simulation step (per-node-type processing, routing, memory overflow)
+     6. Analytic flow model + loss + gradient-descent training
+     7. Loss landscape + sparkline                  [mirrors lib/loss-viz.js]
+     8. Rendering (grid, buses, nodes, particles, HUD)
+     9. Viewport (pan/zoom/pinch) + interaction (drag/link/select)
+    10. URL-hash state codec                        [mirrors lib/url-state.js]
+    11. Compile/deploy payload emitters
+    12. UI wiring, keyboard, mobile sheet, boot
+   ============================================================================ */
+'use strict';
+(function(){
+// ---- 0. Constants & palette -------------------------------------------------
+const C = { neon:'#00ff87', cyan:'#60efff', pink:'#ff0080', yellow:'#ffcc00', bg0:'#0a0a0f', bg1:'#000' };
+const TYPE_COLOR = { INPUT:C.cyan, COMPUTE:C.neon, MEMORY:C.yellow, OUTPUT:C.pink };
+// Per-node-type power model (arbitrary "watts" — clearly a simulation).
+const POWER = { INPUT:0.4, CPU:1.2, GPU:3.4, TPU:1.8, MEMORY:0.6, OUTPUT:0.9 };
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const now=()=>performance.now();
+
+// ---- 1. Neon draw utils (multi-pass glow) ----------------------------------
+function neonStroke(ctx,color,width,build,passes=3,blur=16){
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle=color;ctx.shadowColor=color;
+  for(let i=passes;i>=1;i--){ctx.shadowBlur=blur*(i/passes);ctx.lineWidth=width*(0.55+0.45*(i/passes));ctx.beginPath();build(ctx);ctx.stroke();}
+  ctx.restore();
+}
+function neonDot(ctx,x,y,r,color,passes=3,blur=14){
+  ctx.save();ctx.fillStyle=color;ctx.shadowColor=color;
+  for(let i=passes;i>=1;i--){ctx.shadowBlur=blur*(i/passes);ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();}
+  ctx.restore();
+}
+function neonText(ctx,txt,x,y,color,font,align='left',passes=2,blur=8){
+  ctx.save();ctx.font=font;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.shadowColor=color;
+  for(let i=passes;i>=1;i--){ctx.shadowBlur=blur*(i/passes);ctx.fillText(txt,x,y);}
+  ctx.restore();
+}
+function hueColor(h){h=((h%360)+360)%360;return `hsl(${h},100%,62%)`;}
+
+// ---- 2. Particle object pool -----------------------------------------------
+class ParticlePool{
+  constructor(cap){
+    this.cap=cap;this.items=new Array(cap);this.free=new Int32Array(cap);this.active=new Uint8Array(cap);
+    this.freeTop=cap;this.activeCount=0;this.exhausted=0;
+    for(let i=0;i<cap;i++){this.items[i]=this._mk(i);this.free[i]=cap-1-i;}
+  }
+  _mk(i){return {_i:i,x:0,y:0,value:0,hue:150,speed:1,drop:false,
+    fromN:-1,toN:-1,busId:-1,seg:0,progress:0,delay:0,queuedAt:0,inQueue:false,alive:false,age:0,err:false,prio:0};}
+  acquire(){if(this.freeTop===0){this.exhausted++;return null;}const idx=this.free[--this.freeTop];this.active[idx]=1;this.activeCount++;const o=this.items[idx];this._reset(o);return o;}
+  _reset(o){o.value=0;o.hue=150;o.speed=1;o.drop=false;o.fromN=-1;o.toN=-1;o.busId=-1;o.seg=0;o.progress=0;o.delay=0;o.inQueue=false;o.alive=true;o.age=0;o.err=false;o.prio=0;}
+  release(o){const idx=o._i;if(!this.active[idx])return;this.active[idx]=0;o.alive=false;this.free[this.freeTop++]=idx;this.activeCount--;}
+  forEachActive(fn){const it=this.items,ac=this.active;for(let i=0;i<this.cap;i++)if(ac[i])fn(it[i]);}
+  get utilization(){return this.activeCount/this.cap;}
+}
+// ---- 3. Graph model + sub-specs --------------------------------------------
+// SUBSPEC: mu = service rate (pkt/s); cap = queue/buffer capacity; power model;
+// COMPUTE personalities: CPU serial(batch1,tiny queue) / GPU big batch high-lat / TPU matmul tiles.
+const SUBSPEC={
+  'IMU':{type:'INPUT',rate:14,hue:185},'MIC':{type:'INPUT',rate:11,hue:150},'RF-SDR':{type:'INPUT',rate:12,hue:48},
+  'CPU':{type:'COMPUTE',mu:22,cap:6,power:1.2,batch:1,lat:0.045,note:'serial · low latency'},
+  'GPU':{type:'COMPUTE',mu:34,cap:48,power:3.4,batch:12,lat:0.35,note:'parallel bursts · high lat'},
+  'TPU':{type:'COMPUTE',mu:27,cap:24,power:1.5,batch:4,lat:0.148,note:'matmul tiles · power-eff'},
+  'BUFFER':{type:'MEMORY',mu:18,cap:40,power:0.6,note:'state buffer'},
+  'SERVO':{type:'OUTPUT',mu:16,cap:16,power:0.9},'LED-MATRIX':{type:'OUTPUT',mu:30,cap:16,power:0.7},'HID-PAYLOAD':{type:'OUTPUT',mu:15,cap:16,power:0.5},
+};
+const SUB_BY_TYPE={INPUT:['IMU','MIC','RF-SDR'],COMPUTE:['CPU','GPU','TPU'],MEMORY:['BUFFER'],OUTPUT:['SERVO','LED-MATRIX','HID-PAYLOAD']};
+let NODE_SEQ=1, BUS_SEQ=1;
+function mkNode(sub,x,y){const sp=SUBSPEC[sub];return {id:NODE_SEQ++,sub,type:sp.type,x,y,
+  queue:[],fill:0,processed:0,dropped:0,busy:0,util:0,burst:0,burstT:0,drainAcc:0,spawnAcc:0,hue:sp.hue||150,flash:0};}
+function mkBus(fi,ti,w,bw,lat){return {id:BUS_SEQ++,fi,ti,w:w==null?0.5:w,bw:bw||26,lat:lat||0.4,tokens:0,flow:0,errPulse:0,trainPulse:0,dw:0};}
+
+const graph={nodes:[],buses:[]};
+function nodeIndexById(id){return graph.nodes.findIndex(n=>n.id===id);}
+
+// ---- Default scene: 3 inputs, CPU/GPU/TPU, 2 memory, 3 outputs -------------
+function loadDefaultScene(){
+  graph.nodes.length=0;graph.buses.length=0;NODE_SEQ=1;BUS_SEQ=1;
+  const col=(i)=>-520+i*230;
+  const N=(sub,cx,cy)=>{const n=mkNode(sub,cx,cy);graph.nodes.push(n);return graph.nodes.length-1;};
+  const imu=N('IMU',col(0),-150), mic=N('MIC',col(0),0), rf=N('RF-SDR',col(0),150);
+  const cpu=N('CPU',col(1),-150), gpu=N('GPU',col(1),40), tpu=N('TPU',col(1),210);
+  const m1=N('BUFFER',col(2),-90), m2=N('BUFFER',col(2),150);
+  const servo=N('SERVO',col(3),-150), led=N('LED-MATRIX',col(3),0), hid=N('HID-PAYLOAD',col(3),150);
+  const B=(f,t,w)=>graph.buses.push(mkBus(f,t,w));
+  B(imu,cpu,.9);B(imu,tpu,.15);B(mic,cpu,.9);B(mic,gpu,.2);B(rf,gpu,.85);B(rf,tpu,.2);
+  B(cpu,m1,.9);B(cpu,servo,.2);B(gpu,m1,.9);B(gpu,m2,.3);B(tpu,m2,.5);B(tpu,hid,.1);
+  B(m1,servo,.9);B(m1,led,.2);B(m2,led,.9);B(m2,hid,.1);
+  targets=[0.3,0.3,0.4];
+  topologyChanged();
+}
+
+// ---- 4. Kernel injection (guarded) -----------------------------------------
+const PRESETS={
+  passthrough:`// passthrough — identity. Baseline.
+return p;`,
+  relu:`// ReLU clamp — rectify + saturate value, tint by magnitude.
+p.value = Math.max(0, p.value);
+if (p.value > 5) p.value = 5;
+p.hue = 150 - p.value * 12;   // green -> yellow as it saturates
+return p;`,
+  jitter:`// jitter / fuzz — QA stress: perturb value & speed, randomly drop 3%.
+p.value += (Math.random() - 0.5) * 2.2;
+p.speed *= 0.9 + Math.random() * 0.3;
+p.hue = (p.hue + 40 * Math.sin(t * 3 + p.value)) % 360;
+if (Math.random() < 0.03) p.drop = true;   // simulated fault injection
+return p;`,
+  hidboost:`// priority boost · HID payload — tag packets as priority so the router
+// biases them toward buses feeding HID-PAYLOAD, and speeds them up.
+// (nod to BadUSB / DSTIKE-style hardware payloads)
+if (node.type === 'COMPUTE' || node.type === 'MEMORY') {
+  if (p.value > 2) {          // only "strong" signals get priority
+    p.prio = 1;
+    p.speed *= 1.6;
+    p.hue = 320;              // hot pink
+  }
+}
+return p;`
+};
+let kernelSource=PRESETS.passthrough;
+let compiledKernel=null;              // active kernel (may be on probation)
+let lastGoodKernel=null, lastGoodSource=PRESETS.passthrough; // proven kernel
+let kernelCleanRuns=0, kernelErrCount=0, kernelRuntimeErrs=0, kernelReverts=0;
+const KERNEL_ERR_LIMIT=12, KERNEL_PROMOTE_RUNS=240;
+function compileKernel(src){
+  // Guarded compile. Body sees (p, node, t, Math). Strict mode, no implicit globals.
+  const fn=new Function('p','node','t','Math','"use strict";\n'+src+'\n');
+  // Smoke-test on a throwaway particle so obvious faults surface at compile time.
+  const probe={value:1,hue:150,speed:1,drop:false};
+  fn(probe,{sub:'CPU',type:'COMPUTE',id:0},0,Math);
+  return (p,node,tt)=>fn(p,node,tt,Math);
+}
+function hotReload(showOk=true){
+  const src=els.kernelSrc.value;
+  try{
+    const k=compileKernel(src);
+    compiledKernel=k; kernelSource=src;
+    kernelErrCount=0; kernelCleanRuns=0;
+    if(!lastGoodKernel){lastGoodKernel=k;lastGoodSource=src;}
+    if(showOk) logConsole('✔ kernel compiled OK — on probation until '+KERNEL_PROMOTE_RUNS+' clean runs','ok');
+    return true;
+  }catch(e){
+    logConsole('✖ COMPILE ERROR: '+e.name+': '+e.message+'  (previous kernel still live)','err');
+    flashScreen(false);
+    return false;
+  }
+}
+// Per-invocation guard: never let a kernel crash the loop.
+function runKernel(p,node,t){
+  if(!compiledKernel)return;
+  try{
+    compiledKernel(p,node,t);
+    if(!Number.isFinite(p.value))p.value=0;
+    if(!Number.isFinite(p.speed)||p.speed<=0)p.speed=1;
+    if(compiledKernel!==lastGoodKernel && ++kernelCleanRuns>=KERNEL_PROMOTE_RUNS){
+      lastGoodKernel=compiledKernel; lastGoodSource=kernelSource;
+      logConsole('✔ kernel promoted to last-known-good','ok');
+    }
+  }catch(e){
+    kernelRuntimeErrs++; kernelErrCount++;
+    if(kernelErrCount<=3) logConsole('⚠ RUNTIME ERROR #'+kernelErrCount+': '+e.message,'warn');
+    if(kernelErrCount>=KERNEL_ERR_LIMIT){
+      kernelReverts++;
+      if(lastGoodKernel && lastGoodKernel!==compiledKernel){
+        compiledKernel=lastGoodKernel; kernelSource=lastGoodSource;
+        logConsole('✖ kernel threw '+KERNEL_ERR_LIMIT+'x — auto-disabled, reverted to last good kernel','err');
+      }else{
+        compiledKernel=null;
+        logConsole('✖ kernel threw '+KERNEL_ERR_LIMIT+'x — auto-disabled (no good fallback, running raw)','err');
+      }
+      kernelErrCount=0;
+      flashScreen(false);
+    }
+  }
+}
+// ---- 5. Simulation ----------------------------------------------------------
+// Discrete-event-ish particle sim. Buses reference node *indices* (fi/ti);
+// topologyChanged() rebuilds adjacency caches so the hot loop never allocates.
+const pool=new ParticlePool(4096);
+let simTime=0, spawnMult=1.0, paused=false;
+let totalDropped=0, totalDelivered=0, totalSpawned=0;
+let outAdj=[], inAdj=[], busMap=new Map(), outputOrder=[];
+let targets=[0.3,0.3,0.4];
+
+function topologyChanged(){
+  const N=graph.nodes.length;
+  outAdj=new Array(N); inAdj=new Array(N);
+  for(let i=0;i<N;i++){outAdj[i]=[];inAdj[i]=[];}
+  busMap=new Map();
+  for(let b=0;b<graph.buses.length;b++){const bu=graph.buses[b];outAdj[bu.fi].push(b);inAdj[bu.ti].push(b);busMap.set(bu.id,bu);}
+  const prevOut=outputOrder.map(i=>graph.nodes[i]&&graph.nodes[i].id);
+  outputOrder=[];for(let i=0;i<N;i++)if(graph.nodes[i].type==='OUTPUT')outputOrder.push(i);
+  // keep targets aligned with outputs (new outputs default to mean share)
+  if(targets.length!==outputOrder.length){
+    const mean=targets.length?targets.reduce((a,b)=>a+b,0)/targets.length:0.33;
+    while(targets.length<outputOrder.length)targets.push(+mean.toFixed(2));
+    targets.length=outputOrder.length;
+  }
+  graph._scr=null; // flow-model scratch invalid
+  if(typeof syncTargetsUI==='function')syncTargetsUI();
+  if(typeof landscapeDirty!=='undefined')landscapeDirty=true;
+}
+
+// Rolling telemetry buckets (0.25s each, 40 buckets = 10s window)
+const BUCKET=0.25, NB=40;
+const bDeliv=new Float32Array(NB), bDrop=new Float32Array(NB), bSpawn=new Float32Array(NB), bPower=new Float32Array(NB);
+const bOut=[]; // per-output delivered per bucket (Float32Array per output, rebuilt lazily)
+let bIdx=0, bT=0;
+function bucketOut(k){while(bOut.length<=k)bOut.push(new Float32Array(NB));return bOut[k];}
+
+function spawnParticle(ni){
+  const n=graph.nodes[ni];const p=pool.acquire();
+  if(!p)return; // pool exhausted — counted in pool.exhausted
+  totalSpawned++; bSpawn[bIdx]++;
+  p.value=1+Math.random()*2; p.hue=n.hue; p.speed=1;
+  routeFrom(ni,p);
+}
+
+// Weighted-random bus choice by weight; bus bandwidth enforced by token bucket.
+function routeFrom(ni,p){
+  const obs=outAdj[ni];
+  const n=graph.nodes[ni];
+  if(!obs||obs.length===0){ if(n.type==='OUTPUT')deliverParticle(ni,p); else dropAt(ni,p,false); return; }
+  // effective weight: bus weight, x4 toward HID-PAYLOAD for priority packets (kernel-set p.prio)
+  let wsum=0;for(let i=0;i<obs.length;i++)wsum+=effW(obs[i],p);
+  let r=Math.random()*wsum, pick=obs[obs.length-1];
+  for(let i=0;i<obs.length;i++){r-=effW(obs[i],p);if(r<=0){pick=obs[i];break;}}
+  const bus=graph.buses[pick];
+  if(bus.tokens<1){ dropAt(ni,p,false); bus.errPulse=1; return; } // bus saturated
+  bus.tokens-=1;
+  p.busId=bus.id; p.progress=0; p.inQueue=false;
+  // latency-aware travel time; kernel speed multiplies velocity
+  p.delay=bus.lat*(0.75+0.5*Math.random())/Math.max(0.1,p.speed);
+  bus.flow+=1;
+}
+
+function effW(b,p){const bu=graph.buses[b];return (p.prio>0&&graph.nodes[bu.ti].sub==='HID-PAYLOAD')?bu.w*4:bu.w;}
+function deliverParticle(ni,p){
+  const n=graph.nodes[ni]; n.processed++; totalDelivered++; bDeliv[bIdx]++;
+  const k=outputOrder.indexOf(ni); if(k>=0)bucketOut(k)[bIdx]++;
+  n.flash=Math.min(1,n.flash+0.2);
+  pool.release(p);
+}
+function dropAt(ni,p,overflow){
+  const n=graph.nodes[ni]; n.dropped++; totalDropped++; bDrop[bIdx]++;
+  const ib=inAdj[ni]; if(ib)for(let i=0;i<ib.length;i++)graph.buses[ib[i]].errPulse=1;
+  if(overflow)triggerOverflow(n);
+  pool.release(p);
+}
+
+// Arrival at node: enqueue within capacity or drop.
+function ingest(ni,p){
+  const n=graph.nodes[ni];const sp=SUBSPEC[n.sub];
+  if(n.queue.length>=sp.cap){ dropAt(ni,p,n.type==='MEMORY'); if(n.type==='MEMORY')n.flash=1; return; }
+  if((n.sub==='GPU'||n.sub==='TPU')&&n.queue.length===0)n.burstT=sp.lat; // arm batch window
+  n.queue.push(p); p.inQueue=true;
+}
+
+// TPU tile: 4-wide matmul over a batch. Weight matrix derived from the TPU's
+// own outgoing bus weights, so it's genuinely "best for weighted signals".
+const tpuVec=new Float64Array(4), tpuOut=new Float64Array(4);
+function tpuMatmul(ni,batch,count){
+  const obs=outAdj[ni];let wbar=0.5;
+  if(obs&&obs.length){let s=0;for(let i=0;i<obs.length;i++)s+=graph.buses[obs[i]].w;wbar=s/obs.length;}
+  for(let i=0;i<4;i++)tpuVec[i]=i<count?batch[i].value:0;
+  for(let r=0;r<4;r++){let acc=0;for(let c=0;c<4;c++){const m=(r===c?wbar:(1-wbar)/3)*1.0;acc+=m*tpuVec[c];}tpuOut[r]=acc;}
+  for(let i=0;i<count;i++)batch[i].value=tpuOut[i];
+}
+
+// Per-node-type processing personalities.
+const batchScratch=new Array(64);
+function processNode(ni,dt){
+  const n=graph.nodes[ni];const sp=SUBSPEC[n.sub];
+  n.busy=Math.max(0,n.busy-dt);
+  if(n.type==='INPUT')return;
+  if(n.type==='COMPUTE'){
+    if(n.sub==='CPU'){
+      // serial: exactly one particle in service at a time, service time 1/mu
+      n.burstT-=dt;
+      while(n.burstT<=0&&n.queue.length){ const p=n.queue.shift(); n.burstT+=1/sp.mu; n.busy=1/sp.mu; emitFrom(ni,p); }
+      if(!n.queue.length&&n.burstT<0)n.burstT=0;
+    }else{
+      // GPU / TPU: collect for `lat` seconds, then flush up to `batch` in one parallel burst
+      if(!n.queue.length)return;
+      n.burstT-=dt;
+      if(n.burstT<=0){
+        const take=Math.min(sp.batch,n.queue.length);
+        for(let i=0;i<take;i++)batchScratch[i]=n.queue.shift();
+        if(n.sub==='TPU'){for(let o=0;o<take;o+=4)tpuMatmul(ni,subview(o,take),Math.min(4,take-o));}
+        for(let i=0;i<take;i++){emitFrom(ni,batchScratch[i]);batchScratch[i]=null;}
+        n.busy=sp.lat; n.burst=1; n.burstT=sp.lat;
+      }
+    }
+  }else{
+    // MEMORY drains FIFO at mu; OUTPUT actuates at mu. Fractional accumulator keeps rate exact.
+    if(!n.queue.length){n.drainAcc=0;return;}
+    n.drainAcc+=sp.mu*dt;
+    while(n.drainAcc>=1&&n.queue.length){n.drainAcc-=1;const p=n.queue.shift();n.busy=Math.max(n.busy,1/sp.mu);
+      if(n.type==='OUTPUT'){runKernel(p,n,simTime); if(p.drop){dropAt(ni,p,false);continue;} deliverParticle(ni,p);}
+      else emitFrom(ni,p);}
+  }
+  if(n.type==='MEMORY')n.fill=n.queue.length/sp.cap;
+}
+// view helper for TPU tiles without allocating: copies into fixed 4-slot scratch
+const tileScratch=new Array(4);
+function subview(o,take){for(let i=0;i<4;i++)tileScratch[i]=(o+i<take)?batchScratch[o+i]:null;return tileScratch;}
+
+function emitFrom(ni,p){
+  const n=graph.nodes[ni];
+  runKernel(p,n,simTime);
+  if(p.drop){dropAt(ni,p,false);return;}
+  n.processed++;
+  routeFrom(ni,p);
+}
+
+// Advance particles in transit (latency interpolation). No closures, no allocs.
+function advanceTransit(dt){
+  const it=pool.items, ac=pool.active, cap=pool.cap;
+  for(let i=0;i<cap;i++){ if(!ac[i])continue; const p=it[i];
+    p.age+=dt;
+    if(p.inQueue||p.busId<0)continue;
+    p.progress+=dt/Math.max(0.04,p.delay);
+    if(p.progress>=1){ const bus=busMap.get(p.busId); if(!bus){pool.release(p);continue;}
+      p.busId=-1; p.progress=1; ingest(bus.ti,p); }
+  }
+}
+
+function simStep(dt){
+  simTime+=dt;
+  for(let b=0;b<graph.buses.length;b++){const bu=graph.buses[b];bu.tokens=Math.min(bu.bw*0.35+1,(bu.tokens||0)+bu.bw*dt);}
+  for(let ni=0;ni<graph.nodes.length;ni++){const n=graph.nodes[ni];if(n.type!=='INPUT')continue;
+    n.spawnAcc+=SUBSPEC[n.sub].rate*spawnMult*dt;
+    while(n.spawnAcc>=1){n.spawnAcc-=1;spawnParticle(ni);n.busy=0.08;}
+  }
+  advanceTransit(dt);
+  for(let ni=0;ni<graph.nodes.length;ni++)processNode(ni,dt);
+  // live power: per-type power * activity (busy fraction), idle floor 20%
+  let pw=0;
+  for(let ni=0;ni<graph.nodes.length;ni++){const n=graph.nodes[ni];const sp=SUBSPEC[n.sub];
+    const base=n.type==='INPUT'?0.4:sp.power; n.util=lerp(n.util,n.busy>0?1:0,0.08); pw+=base*(0.2+0.8*n.util);}
+  livePower=lerp(livePower,pw,0.1);
+  bPower[bIdx]=livePower;
+  for(let b=0;b<graph.buses.length;b++){const bu=graph.buses[b];bu.flow*=0.9;bu.errPulse*=0.93;}
+  for(let ni=0;ni<graph.nodes.length;ni++){const n=graph.nodes[ni];n.flash*=0.9;n.burst*=0.85;}
+  bT+=dt;
+  if(bT>=BUCKET){bT-=BUCKET;bIdx=(bIdx+1)%NB;bDeliv[bIdx]=0;bDrop[bIdx]=0;bSpawn[bIdx]=0;for(let k=0;k<bOut.length;k++)bOut[k][bIdx]=0;}
+}
+let livePower=0;
+
+// Measured telemetry from the rolling window (excludes the in-progress bucket).
+const tele={thru:0,err:0,stab:0,power:0,outShare:[],measLoss:0};
+function computeTelemetry(){
+  let d=0,dr=0,cnt=0,mean=0,m2=0;
+  const span=Math.min(NB-1,Math.floor(simTime/BUCKET));
+  for(let k=1;k<=span;k++){const j=(bIdx-k+NB)%NB;d+=bDeliv[j];dr+=bDrop[j];
+    const x=bDeliv[j]/BUCKET;cnt++;const dl=x-mean;mean+=dl/cnt;m2+=dl*(x-mean);}
+  const secs=Math.max(BUCKET,span*BUCKET);
+  tele.thru=d/secs;
+  tele.err=(d+dr)>0?dr/(d+dr):0;
+  const variance=cnt>1?m2/(cnt-1):0;
+  // Stability = 1/(1+CV^2): 1.0 = perfectly steady throughput, ->0 = chaotic
+  const cv2=mean>0?variance/(mean*mean):0; tele.stab=cnt>1?1/(1+cv2):0;
+  tele.power=livePower;
+  tele.outShare.length=outputOrder.length;
+  for(let o=0;o<outputOrder.length;o++){const arr=bucketOut(o);let s=0;for(let k=1;k<=span;k++)s+=arr[(bIdx-k+NB)%NB];tele.outShare[o]=d>0?s/d:0;}
+}
+// ---- 6. Analytic flow model + loss + gradient descent ----------------------
+// Steady-state fluid approximation of the particle sim. Service nodes soft-cap
+// throughput at their rate mu:   out = f / (1 + (f/mu)^4)^(1/4)   (smooth min)
+// Buses split a node's output by weight share and soft-cap at bandwidth.
+// Excess becomes drops. Jacobi iteration also tolerates cycles.
+// Gradients: central finite differences on this model (honest: not autodiff).
+function softcap(f,mu){ if(f<=0) return 0; const r=f/mu, r2=r*r; return f/Math.pow(1+r2*r2,0.25); }
+const LOSS_W={dist:4.0,drop:1.5,power:0.25};
+const W_MIN=0.03, W_MAX=1.0;
+function flowModel(g,spawn,W){
+  const N=g.nodes.length,B=g.buses.length;
+  if(!g._scr||g._scr.N!==N||g._scr.B!==B)g._scr={N,B,IN:new Float64Array(N),OUT:new Float64Array(N),DROP:new Float64Array(N),BF:new Float64Array(B),WS:new Float64Array(N),outRates:new Float64Array(64),res:{}};
+  const s=g._scr,IN=s.IN,OUT=s.OUT,DROP=s.DROP,BF=s.BF,WS=s.WS;
+  WS.fill(0);for(let b=0;b<B;b++)WS[g.buses[b].fi]+=W?W[b]:g.buses[b].w;
+  BF.fill(0);let spawnTot=0;
+  for(let n=0;n<N;n++)if(g.nodes[n].type==='INPUT')spawnTot+=SUBSPEC[g.nodes[n].sub].rate*spawn;
+  for(let it=0;it<24;it++){
+    IN.fill(0);
+    for(let n=0;n<N;n++){const nd=g.nodes[n];if(nd.type==='INPUT')IN[n]=SUBSPEC[nd.sub].rate*spawn;}
+    for(let b=0;b<B;b++)IN[g.buses[b].ti]+=BF[b];
+    for(let n=0;n<N;n++){const nd=g.nodes[n];OUT[n]=nd.type==='INPUT'?IN[n]:softcap(IN[n],SUBSPEC[nd.sub].mu);DROP[n]=IN[n]-OUT[n];}
+    for(let b=0;b<B;b++){const bu=g.buses[b];if(g.nodes[bu.fi].type==='OUTPUT'){BF[b]=0;continue;}
+      const ws=WS[bu.fi];const fb=ws>0?OUT[bu.fi]*(W?W[b]:bu.w)/ws:0;BF[b]=softcap(fb,bu.bw);}
+  }
+  let delivered=0,drops=0,power=0,powerMax=0,no=0;
+  for(let n=0;n<N;n++){const nd=g.nodes[n];
+    if(nd.type==='INPUT'){power+=0.4;powerMax+=0.4;if(WS[n]<=0)drops+=OUT[n];continue;}
+    const sp=SUBSPEC[nd.sub];drops+=DROP[n];power+=sp.power*(0.2+0.8*Math.min(1,OUT[n]/sp.mu));powerMax+=sp.power;
+    if(nd.type==='OUTPUT'){delivered+=OUT[n];s.outRates[no++]=OUT[n];}
+    else if(WS[n]<=0)drops+=OUT[n];
+  }
+  for(let b=0;b<B;b++){const bu=g.buses[b];if(g.nodes[bu.fi].type==='OUTPUT')continue;
+    const ws=WS[bu.fi];const fb=ws>0?OUT[bu.fi]*(W?W[b]:bu.w)/ws:0;drops+=fb-BF[b];}
+  const r=s.res;r.spawn=spawnTot;r.delivered=delivered;r.drops=drops;r.power=power;r.powerMax=powerMax;r.no=no;r.outRates=s.outRates;
+  return r;
+}
+function lossTerms(outRates,no,delivered,spawn,drops,power,powerMax,out){
+  let dist=0,tsum=0;for(let i=0;i<no;i++)tsum+=targets[i]||0;
+  for(let i=0;i<no;i++){const sh=delivered>0?outRates[i]/delivered:0;const tg=tsum>0?(targets[i]||0)/tsum:1/no;dist+=(sh-tg)*(sh-tg);}
+  const dropFrac=spawn>0?clamp(drops/spawn,0,1):0, pw=powerMax>0?power/powerMax:0;
+  out.dist=dist;out.dropFrac=dropFrac;out.pw=pw;out.loss=LOSS_W.dist*dist+LOSS_W.drop*dropFrac+LOSS_W.power*pw;
+  return out;
+}
+const _lt={};
+function modelLoss(W){const m=flowModel(graph,spawnMult,W);return lossTerms(m.outRates,m.no,m.delivered,m.spawn,m.drops,m.power,m.powerMax,_lt).loss;}
+function modelLossTerms(){const m=flowModel(graph,spawnMult,null);const o=lossTerms(m.outRates,m.no,m.delivered,m.spawn,m.drops,m.power,m.powerMax,{});o.delivered=m.delivered;o.spawn=m.spawn;return o;}
+
+// Training state
+let training=false, epoch=0, trainAcc=0, lr=0.06;
+const EPOCH_DT=0.18;               // seconds between visible epochs
+let Wv=new Float64Array(0), Gv=new Float64Array(0);
+const lossHist=[]; const LOSS_HIST_MAX=240;
+let lossStart=null, lastLoss=null, plateau=0;
+let sliceA=-1, sliceB=-1;          // bus indices for the landscape slice
+let landscapeDirty=true;
+
+// Backprop pulse pool (fixed size, no allocation while training)
+const PULSES=new Array(256).fill(null).map(()=>({alive:false,bus:-1,t:0,mag:0}));
+function emitPulse(b,mag){for(let i=0;i<PULSES.length;i++){const p=PULSES[i];if(!p.alive){p.alive=true;p.bus=b;p.t=0;p.mag=mag;return;}}}
+
+function ensureVectors(){const B=graph.buses.length;if(Wv.length!==B){Wv=new Float64Array(B);Gv=new Float64Array(B);}for(let b=0;b<B;b++)Wv[b]=graph.buses[b].w;}
+function pickSlice(){
+  ensureVectors(); if(graph.buses.length<2){sliceA=sliceB=-1;return;}
+  fdGradient(0.002);
+  let a=-1,b=-1,ga=-1,gb=-1;
+  for(let i=0;i<Gv.length;i++){const g=Math.abs(Gv[i]);if(g>ga){gb=ga;b=a;ga=g;a=i;}else if(g>gb){gb=g;b=i;}}
+  sliceA=a;sliceB=b;landscapeDirty=true;if(lossViz)lossViz.reset();
+}
+function fdGradient(h){
+  for(let b=0;b<Wv.length;b++){const w0=Wv[b];const wp=Math.min(W_MAX,w0+h),wm=Math.max(W_MIN,w0-h);
+    Wv[b]=wp;const lp=modelLoss(Wv);Wv[b]=wm;const lm=modelLoss(Wv);Wv[b]=w0;Gv[b]=(lp-lm)/(wp-wm);}
+}
+function trainEpoch(){
+  if(!graph.buses.length||!outputOrder.length){setTraining(false);toast('Need buses + at least one OUTPUT to train');return;}
+  ensureVectors();
+  if(sliceA<0||sliceA>=graph.buses.length||sliceB>=graph.buses.length)pickSlice();
+  const L0=modelLoss(Wv);
+  if(lossStart===null)lossStart=L0;
+  fdGradient(1e-3);
+  let gmax=1e-9;for(let b=0;b<Gv.length;b++)gmax=Math.max(gmax,Math.abs(Gv[b]));
+  for(let b=0;b<Gv.length;b++){
+    const bu=graph.buses[b];
+    const nw=clamp(Wv[b]-lr*Gv[b],W_MIN,W_MAX);
+    bu.dw=nw-bu.w; bu.w=nw; Wv[b]=nw;
+    const mag=Math.abs(Gv[b])/gmax;
+    if(mag>0.04){emitPulse(b,mag);bu.trainPulse=Math.max(bu.trainPulse,mag);}
+  }
+  epoch++;
+  const L1=modelLoss(Wv);
+  lossHist.push(L1);if(lossHist.length>LOSS_HIST_MAX)lossHist.shift();
+  if(lastLoss!==null&&Math.abs(lastLoss-L1)<2e-5)plateau++;else plateau=0;
+  lastLoss=L1;
+  if(epoch%3===0)landscapeDirty=true;
+  if(plateau>=12){setTraining(false);toast('▲ converged @ epoch '+epoch+' · loss '+L1.toFixed(4));}
+}
+function setTraining(on){
+  training=on; els.btnTrain.classList.toggle('on',on);
+  els.btnTrain.textContent=on?'■ STOP':'▲ TRAIN';
+  if(on){plateau=0;if(sliceA<0)pickSlice();logConsole('▲ training: finite-difference GD on analytic flow model, lr='+lr,'ok');}
+  const mt=document.getElementById('mTrain');if(mt){mt.classList.toggle('on',on);mt.textContent=on?'■':'▲ TRAIN';}
+}
+
+// ---- 7. Loss landscape + sparkline -----------------------------------------
+class LossLandscape{
+  constructor(ctx,res){this.ctx=ctx;this.res=res;this.trail=[];this.maxTrail=90;this.img=null;this.grid=new Float32Array(res*res);this.lo=0;this.hi=1;}
+  static color(t,out){t=clamp(t,0,1);let r,g,b;
+    if(t<0.5){const k=t/0.5;r=0x00+k*0x60;g=0xff-k*0x10;b=0x87+k*(0xff-0x87);}
+    else{const k=(t-0.5)/0.5;r=0x60+k*(0xff-0x60);g=0xef-k*0xef;b=0xff-k*(0xff-0x80);}
+    out[0]=r|0;out[1]=g|0;out[2]=b|0;}
+  render(lossFn,w,h){
+    const ctx=this.ctx,res=this.res,grid=this.grid;let lo=Infinity,hi=-Infinity;
+    for(let j=0;j<res;j++)for(let i=0;i<res;i++){const L=lossFn(i/(res-1),j/(res-1));grid[j*res+i]=L;if(L<lo)lo=L;if(L>hi)hi=L;}
+    this.lo=lo;this.hi=hi;const span=(hi-lo)||1;
+    if(!this.img||this.img.width!==w||this.img.height!==h)this.img=ctx.createImageData(w,h);
+    const d=this.img.data,c=[0,0,0];
+    for(let y=0;y<h;y++){const gy=(y/(h-1))*(res-1),j0=gy|0,j1=Math.min(res-1,j0+1),fy=gy-j0;
+      for(let x=0;x<w;x++){const gx=(x/(w-1))*(res-1),i0=gx|0,i1=Math.min(res-1,i0+1),fx=gx-i0;
+        const v=(grid[j0*res+i0]*(1-fx)+grid[j0*res+i1]*fx)*(1-fy)+(grid[j1*res+i0]*(1-fx)+grid[j1*res+i1]*fx)*fy;
+        const t=(v-lo)/span; const band=Math.abs(((t*9)%1)-0.5)<0.06?0.35:1; // contour lines
+        LossLandscape.color(Math.sqrt(t),c);const k=(y*w+x)*4;
+        d[k]=c[0]*band*0.55;d[k+1]=c[1]*band*0.55;d[k+2]=c[2]*band*0.55;d[k+3]=255;}}
+  }
+  draw(u,v,w,h,addTrail){
+    const ctx=this.ctx;ctx.putImageData(this.img,0,0);
+    if(addTrail){const L=this.trail[this.trail.length-1];if(!L||Math.abs(L.u-u)+Math.abs(L.v-v)>0.002){this.trail.push({u,v});if(this.trail.length>this.maxTrail)this.trail.shift();}}
+    if(this.trail.length>1){ctx.save();ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=1.3;ctx.setLineDash([3,2]);ctx.beginPath();
+      for(let i=0;i<this.trail.length;i++){const t=this.trail[i];i?ctx.lineTo(t.u*w,t.v*h):ctx.moveTo(t.u*w,t.v*h);}ctx.stroke();ctx.restore();}
+    neonDot(ctx,u*w,v*h,4.5,C.yellow,3,14);
+    ctx.save();ctx.strokeStyle='#000';ctx.lineWidth=1;ctx.beginPath();ctx.arc(u*w,v*h,4.5,0,6.2832);ctx.stroke();ctx.restore();
+  }
+  reset(){this.trail.length=0;}
+}
+let lossViz=null;
+function renderLandscape(){
+  const cv=els.lpCanvas, w=cv.width, h=cv.height, ctx=cv.getContext('2d');
+  if(!lossViz)lossViz=new LossLandscape(ctx,30);
+  if(sliceA<0||sliceB<0||sliceA>=graph.buses.length||sliceB>=graph.buses.length){
+    ctx.fillStyle='#05060a';ctx.fillRect(0,0,w,h);neonText(ctx,'press TRAIN to slice',w/2,h/2,C.cyan,'10px JetBrains Mono, monospace','center');return;}
+  ensureVectors();
+  if(landscapeDirty){
+    const wa=Wv[sliceA],wb=Wv[sliceB];
+    lossViz.render((u,v)=>{Wv[sliceA]=W_MIN+u*(W_MAX-W_MIN);Wv[sliceB]=W_MAX-v*(W_MAX-W_MIN);return modelLoss(Wv);},w,h);
+    Wv[sliceA]=wa;Wv[sliceB]=wb;landscapeDirty=false;
+    const A=graph.buses[sliceA],B=graph.buses[sliceB];
+    els.lossAxes.textContent='x:'+busLabel(A)+'  y:'+busLabel(B);
+  }
+  const u=(graph.buses[sliceA].w-W_MIN)/(W_MAX-W_MIN), v=1-(graph.buses[sliceB].w-W_MIN)/(W_MAX-W_MIN);
+  lossViz.draw(u,v,w,h,training);
+}
+function busLabel(b){const f=graph.nodes[b.fi],t=graph.nodes[b.ti];return (f?f.sub:'?')+'→'+(t?t.sub:'?');}
+function renderSpark(){
+  const cv=els.lossCanvas,ctx=cv.getContext('2d'),w=cv.width,h=cv.height;
+  ctx.fillStyle='#05060a';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='rgba(0,255,135,.08)';ctx.lineWidth=1;for(let y=10;y<h;y+=10){ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(w,y+.5);ctx.stroke();}
+  if(lossHist.length<2){neonText(ctx,'no epochs yet',w/2,h/2,'#2f7d5c','9px JetBrains Mono, monospace','center',1,0);return;}
+  let lo=Infinity,hi=-Infinity;for(const v of lossHist){if(v<lo)lo=v;if(v>hi)hi=v;}
+  const span=(hi-lo)||1;
+  neonStroke(ctx,C.pink,1.6,c=>{for(let i=0;i<lossHist.length;i++){const x=i/(lossHist.length-1)*(w-4)+2,y=h-4-(lossHist[i]-lo)/span*(h-8);i?c.lineTo(x,y):c.moveTo(x,y);}},2,8);
+  ctx.font='9px JetBrains Mono, monospace';ctx.fillStyle='#ff80c0';ctx.textAlign='right';ctx.fillText(hi.toFixed(3),w-3,9);ctx.fillText(lo.toFixed(3),w-3,h-3);
+}
+// ---- 8. Rendering -----------------------------------------------------------
+const cv=document.getElementById('stage'); const ctx=cv.getContext('2d');
+let DPR=1, VW=0, VH=0;
+const cam={x:0,y:0,z:1};
+const NODE_W=150, NODE_H=62, PORT_R=7;
+function resize(){DPR=Math.min(2,window.devicePixelRatio||1);VW=cv.clientWidth;VH=cv.clientHeight;cv.width=Math.round(VW*DPR);cv.height=Math.round(VH*DPR);}
+const w2sX=x=>(x-cam.x)*cam.z+VW/2, w2sY=y=>(y-cam.y)*cam.z+VH/2;
+const s2wX=x=>(x-VW/2)/cam.z+cam.x, s2wY=y=>(y-VH/2)/cam.z+cam.y;
+const outPort=n=>({x:n.x+NODE_W/2,y:n.y}), inPort=n=>({x:n.x-NODE_W/2,y:n.y});
+
+// Pre-rendered particle glow sprites (12 hue buckets) — real glow, zero per-frame gradient allocs.
+const SPRITES=[]; const SPR=24;
+function buildSprites(){for(let i=0;i<12;i++){const c=document.createElement('canvas');c.width=c.height=SPR;const g=c.getContext('2d');
+  const grd=g.createRadialGradient(SPR/2,SPR/2,0,SPR/2,SPR/2,SPR/2);const col=`hsla(${i*30},100%,62%,`;
+  grd.addColorStop(0,'rgba(255,255,255,1)');grd.addColorStop(0.18,col+'1)');grd.addColorStop(0.45,col+'.35)');grd.addColorStop(1,col+'0)');
+  g.fillStyle=grd;g.fillRect(0,0,SPR,SPR);SPRITES.push(c);}
+  const e=document.createElement('canvas');e.width=e.height=SPR;const g=e.getContext('2d');const grd=g.createRadialGradient(SPR/2,SPR/2,0,SPR/2,SPR/2,SPR/2);
+  grd.addColorStop(0,'#fff');grd.addColorStop(0.2,'rgba(255,0,128,1)');grd.addColorStop(1,'rgba(255,0,128,0)');g.fillStyle=grd;g.fillRect(0,0,SPR,SPR);SPRITES.push(e);}
+
+// Bezier geometry for a bus (world coords) — control points by horizontal distance.
+const BZ={x1:0,y1:0,c1x:0,c1y:0,c2x:0,c2y:0,x2:0,y2:0};
+function busGeom(bu){const f=graph.nodes[bu.fi],t=graph.nodes[bu.ti];
+  const x1=f.x+NODE_W/2,y1=f.y,x2=t.x-NODE_W/2,y2=t.y;
+  const dx=Math.max(60,Math.abs(x2-x1)*0.5);
+  BZ.x1=x1;BZ.y1=y1;BZ.c1x=x1+dx;BZ.c1y=y1;BZ.c2x=x2-dx;BZ.c2y=y2;BZ.x2=x2;BZ.y2=y2;return BZ;}
+function bzAt(t,out){const u=1-t,a=u*u*u,b=3*u*u*t,c=3*u*t*t,d=t*t*t;
+  out.x=a*BZ.x1+b*BZ.c1x+c*BZ.c2x+d*BZ.x2; out.y=a*BZ.y1+b*BZ.c1y+c*BZ.c2y+d*BZ.y2; return out;}
+const _pt={x:0,y:0};
+
+function drawGrid(){
+  const step0=40; let step=step0*cam.z; while(step<18)step*=2; while(step>90)step/=2;
+  const ox=((VW/2-cam.x*cam.z)%step+step)%step, oy=((VH/2-cam.y*cam.z)%step+step)%step;
+  ctx.lineWidth=1; ctx.strokeStyle='rgba(0,255,135,0.055)'; ctx.beginPath();
+  for(let x=ox;x<VW;x+=step){ctx.moveTo(Math.round(x)+.5,0);ctx.lineTo(Math.round(x)+.5,VH);}
+  for(let y=oy;y<VH;y+=step){ctx.moveTo(0,Math.round(y)+.5);ctx.lineTo(VW,Math.round(y)+.5);}
+  ctx.stroke();
+  // major lines every 4
+  const big=step*4, bx=((VW/2-cam.x*cam.z)%big+big)%big, by=((VH/2-cam.y*cam.z)%big+big)%big;
+  ctx.strokeStyle='rgba(96,239,255,0.06)'; ctx.beginPath();
+  for(let x=bx;x<VW;x+=big){ctx.moveTo(Math.round(x)+.5,0);ctx.lineTo(Math.round(x)+.5,VH);}
+  for(let y=by;y<VH;y+=big){ctx.moveTo(0,Math.round(y)+.5);ctx.lineTo(VW,Math.round(y)+.5);}
+  ctx.stroke();
+}
+
+function drawBuses(){
+  for(let b=0;b<graph.buses.length;b++){const bu=graph.buses[b];busGeom(bu);
+    const sel=selection.kind==='bus'&&selection.id===bu.id;
+    const width=(1.2+bu.w*6)*Math.min(1.4,Math.max(0.6,cam.z));
+    const hot=Math.min(1,bu.flow/6);
+    const col=sel?C.yellow:(bu.errPulse>0.3?C.pink:(hot>0.2?C.neon:'rgba(0,255,135,0.55)'));
+    neonStroke(ctx,col,width,c=>{c.moveTo(BZ.x1,BZ.y1);c.bezierCurveTo(BZ.c1x,BZ.c1y,BZ.c2x,BZ.c2y,BZ.x2,BZ.y2);},3,8+hot*14+(sel?10:0));
+    // core line
+    ctx.save();ctx.strokeStyle='rgba(255,255,255,'+(0.18+hot*0.4)+')';ctx.lineWidth=Math.max(0.6,width*0.25);
+    ctx.beginPath();ctx.moveTo(BZ.x1,BZ.y1);ctx.bezierCurveTo(BZ.c1x,BZ.c1y,BZ.c2x,BZ.c2y,BZ.x2,BZ.y2);ctx.stroke();ctx.restore();
+    // training: weight-change label + glow ring
+    if(bu.trainPulse>0.05||sel||cam.z>1.3){
+      bzAt(0.5,_pt);const dwTxt=(training&&Math.abs(bu.dw)>1e-4)?(bu.dw>0?' ▲':' ▼'):'';
+      neonText(ctx,'w '+bu.w.toFixed(2)+dwTxt,_pt.x,_pt.y-10,bu.dw<0&&training?C.pink:C.cyan,'10px JetBrains Mono, monospace','center',1,6);
+    }
+  }
+}
+
+// backprop error pulses travel output -> input (reverse along bus)
+function drawPulses(dt){
+  for(let i=0;i<PULSES.length;i++){const p=PULSES[i];if(!p.alive)continue;
+    p.t+=dt*1.6; if(p.t>=1||p.bus>=graph.buses.length){p.alive=false;continue;}
+    busGeom(graph.buses[p.bus]); bzAt(1-p.t,_pt);
+    const r=3+p.mag*5;
+    ctx.globalAlpha=1-p.t*0.5;
+    ctx.drawImage(SPRITES[12],_pt.x-r*2.2,_pt.y-r*2.2,r*4.4,r*4.4);
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawParticles(){
+  const it=pool.items, ac=pool.active, cap=pool.cap;
+  ctx.globalCompositeOperation='lighter';
+  const s=16;
+  for(let i=0;i<cap;i++){ if(!ac[i])continue; const p=it[i];
+    if(p.busId<0||p.inQueue)continue;
+    const bu=busMap.get(p.busId); if(!bu)continue;
+    busGeom(bu); bzAt(Math.min(1,p.progress),_pt);
+    const spr=SPRITES[((((p.hue%360)+360)%360)/30|0)%12];
+    const sz=s*(0.8+Math.min(1.2,Math.abs(p.value)*0.15));
+    ctx.drawImage(spr,_pt.x-sz/2,_pt.y-sz/2,sz,sz);
+  }
+  ctx.globalCompositeOperation='source-over';
+}
+
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+function drawNodes(){
+  for(let ni=0;ni<graph.nodes.length;ni++){const n=graph.nodes[ni];const sp=SUBSPEC[n.sub];
+    const col=TYPE_COLOR[n.type]; const x=n.x-NODE_W/2,y=n.y-NODE_H/2;
+    const sel=selection.kind==='node'&&selection.id===n.id;
+    const act=Math.min(1,n.util*1.2+n.flash);
+    // body
+    ctx.save();ctx.shadowColor=n.flash>0.5&&n.type==='MEMORY'?C.pink:col;ctx.shadowBlur=10+act*22+(sel?16:0);
+    rr(ctx,x,y,NODE_W,NODE_H,10);ctx.fillStyle='rgba(6,8,14,0.92)';ctx.fill();
+    ctx.lineWidth=sel?2.4:1.4;ctx.strokeStyle=sel?C.yellow:col;ctx.stroke();ctx.stroke();ctx.restore();
+    // header stripe
+    ctx.save();rr(ctx,x,y,NODE_W,16,10);ctx.clip();ctx.fillStyle=col;ctx.globalAlpha=0.16+act*0.25;ctx.fillRect(x,y,NODE_W,16);ctx.restore();
+    neonText(ctx,n.type,x+9,y+8.5,col,'700 9px JetBrains Mono, monospace','left',1,6);
+    neonText(ctx,'#'+n.id,x+NODE_W-9,y+8.5,'rgba(230,255,240,.55)','9px JetBrains Mono, monospace','right',1,0);
+    neonText(ctx,n.sub,x+9,y+29,'#eafff4','700 13px JetBrains Mono, monospace','left',2,8);
+    // per-type readout (all real sim values)
+    let info='';
+    if(n.type==='INPUT')info=(SUBSPEC[n.sub].rate*spawnMult).toFixed(1)+' pkt/s';
+    else if(n.type==='COMPUTE')info='q '+n.queue.length+'/'+sp.cap+' · '+(n.sub==='CPU'?'serial':('batch '+sp.batch))+' · '+Math.round(n.util*100)+'%';
+    else if(n.type==='MEMORY')info='fill '+n.queue.length+'/'+sp.cap+' · drop '+n.dropped;
+    else info='act '+n.processed+' · drop '+n.dropped;
+    neonText(ctx,info,x+9,y+46,'rgba(200,255,230,.75)','9.5px JetBrains Mono, monospace','left',1,0);
+    // memory fill bar
+    if(n.type==='MEMORY'||n.type==='COMPUTE'){const f=n.queue.length/sp.cap;const bw=NODE_W-18;
+      ctx.fillStyle='rgba(255,255,255,.06)';ctx.fillRect(x+9,y+NODE_H-8,bw,3);
+      const fc=f>0.85?C.pink:(f>0.6?C.yellow:col);ctx.save();ctx.shadowColor=fc;ctx.shadowBlur=8;ctx.fillStyle=fc;ctx.fillRect(x+9,y+NODE_H-8,bw*f,3);ctx.restore();}
+    // GPU burst flash
+    if(n.burst>0.05){ctx.save();ctx.globalAlpha=n.burst*0.5;ctx.strokeStyle=col;ctx.lineWidth=2;rr(ctx,x-4,y-4,NODE_W+8,NODE_H+8,13);ctx.stroke();ctx.restore();}
+    // ports
+    if(n.type!=='INPUT')neonDot(ctx,x,n.y,PORT_R*0.75,link.active&&link.hover===ni?C.yellow:'#0b3',2,8);
+    if(n.type!=='OUTPUT')neonDot(ctx,x+NODE_W,n.y,PORT_R*0.75,col,2,10);
+  }
+}
+
+function drawLinkDrag(){
+  if(!link.active)return;const f=graph.nodes[link.from];if(!f)return;
+  const x1=f.x+NODE_W/2,y1=f.y,x2=link.wx,y2=link.wy,dx=Math.max(60,Math.abs(x2-x1)*0.5);
+  ctx.save();ctx.setLineDash([6,5]);
+  neonStroke(ctx,C.yellow,2,c=>{c.moveTo(x1,y1);c.bezierCurveTo(x1+dx,y1,x2-dx,y2,x2,y2);},2,12);
+  ctx.restore();
+}
+
+let shakeT=0;
+function render(dt){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle=C.bg0;ctx.fillRect(0,0,VW,VH);
+  drawGrid();
+  let sx=0,sy=0;if(shakeT>0){shakeT-=dt;const k=shakeT*28;sx=(Math.random()-.5)*k;sy=(Math.random()-.5)*k;}
+  ctx.setTransform(DPR*cam.z,0,0,DPR*cam.z,DPR*(VW/2-cam.x*cam.z+sx),DPR*(VH/2-cam.y*cam.z+sy));
+  drawBuses();
+  drawParticles();
+  drawPulses(dt);
+  drawNodes();
+  drawLinkDrag();
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(paused)neonText(ctx,'⏸ SIM PAUSED — [SPACE]',VW/2,40,C.yellow,'700 12px JetBrains Mono, monospace','center',2,10);
+}
+
+// ---- 9. Viewport + interaction ---------------------------------------------
+const selection={kind:null,id:-1};
+const link={active:false,from:-1,wx:0,wy:0,hover:-1};
+const pointers=new Map();          // active pointers for pinch
+let drag=null;                     // {mode:'pan'|'node', ...}
+let pinch=null;
+let lastTap={t:0,x:0,y:0};
+
+function hitNode(wx,wy){for(let i=graph.nodes.length-1;i>=0;i--){const n=graph.nodes[i];
+  if(Math.abs(wx-n.x)<=NODE_W/2+2&&Math.abs(wy-n.y)<=NODE_H/2+2)return i;}return -1;}
+function hitOutPort(wx,wy){const r=(PORT_R+6)/Math.min(1,cam.z);for(let i=graph.nodes.length-1;i>=0;i--){const n=graph.nodes[i];if(n.type==='OUTPUT')continue;
+  const dx=wx-(n.x+NODE_W/2),dy=wy-n.y;if(dx*dx+dy*dy<=r*r)return i;}return -1;}
+function hitBus(wx,wy){const tol=8/cam.z;let best=-1,bd=tol;
+  for(let b=0;b<graph.buses.length;b++){busGeom(graph.buses[b]);
+    for(let k=0;k<=24;k++){bzAt(k/24,_pt);const d=Math.hypot(_pt.x-wx,_pt.y-wy);if(d<bd){bd=d;best=b;}}}
+  return best;}
+
+function select(kind,id){selection.kind=kind;selection.id=id;updateInspector();}
+function zoomAt(sx,sy,factor){const wx=s2wX(sx),wy=s2wY(sy);cam.z=clamp(cam.z*factor,0.25,3);cam.x=wx-(sx-VW/2)/cam.z;cam.y=wy-(sy-VH/2)/cam.z;}
+function fitView(){
+  if(!graph.nodes.length){cam.x=0;cam.y=0;cam.z=1;return;}
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const n of graph.nodes){x0=Math.min(x0,n.x-NODE_W/2);x1=Math.max(x1,n.x+NODE_W/2);y0=Math.min(y0,n.y-NODE_H/2);y1=Math.max(y1,n.y+NODE_H/2);}
+  // usable area excludes side panels on desktop, tab bar on mobile
+  const mobile=VW<=760; const padL=mobile?16:280, padR=mobile?16:370, padT=mobile?40:40, padB=mobile?70:40;
+  const aw=Math.max(100,VW-padL-padR), ah=Math.max(100,VH-padT-padB);
+  cam.z=clamp(Math.min(aw/(x1-x0+60),ah/(y1-y0+60)),0.25,1.6);
+  const cxs=padL+aw/2, cys=padT+ah/2;
+  cam.x=(x0+x1)/2-(cxs-VW/2)/cam.z; cam.y=(y0+y1)/2-(cys-VH/2)/cam.z;
+}
+
+function onPointerDown(e){
+  cv.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId,{x:e.offsetX,y:e.offsetY});
+  hidePalette();
+  if(pointers.size===2){ // start pinch; cancel single-pointer actions
+    const [a,b]=[...pointers.values()];drag=null;link.active=false;
+    pinch={d:Math.hypot(a.x-b.x,a.y-b.y),mx:(a.x+b.x)/2,my:(a.y+b.y)/2};return;}
+  const sx=e.offsetX,sy=e.offsetY,wx=s2wX(sx),wy=s2wY(sy);
+  if(e.button===1||e.button===2){drag={mode:'pan',sx,sy,cx:cam.x,cy:cam.y};e.preventDefault();return;}
+  // double tap / double click on empty space -> palette
+  const t=now();const dbl=(t-lastTap.t<320&&Math.hypot(sx-lastTap.x,sy-lastTap.y)<24);lastTap={t,x:sx,y:sy};
+  const op=hitOutPort(wx,wy);
+  if(op>=0){link.active=true;link.from=op;link.wx=wx;link.wy=wy;link.hover=-1;return;}
+  const ni=hitNode(wx,wy);
+  if(ni>=0){const n=graph.nodes[ni];select('node',n.id);drag={mode:'node',ni,ox:wx-n.x,oy:wy-n.y,moved:false};return;}
+  const bi=hitBus(wx,wy);
+  if(bi>=0){select('bus',graph.buses[bi].id);return;}
+  if(dbl){showPalette(sx,sy,wx,wy);return;}
+  select(null,-1);
+  drag={mode:'pan',sx,sy,cx:cam.x,cy:cam.y};
+}
+function onPointerMove(e){
+  if(!pointers.has(e.pointerId))return;
+  pointers.set(e.pointerId,{x:e.offsetX,y:e.offsetY});
+  if(pinch&&pointers.size>=2){const [a,b]=[...pointers.values()];
+    const d=Math.hypot(a.x-b.x,a.y-b.y),mx=(a.x+b.x)/2,my=(a.y+b.y)/2;
+    // two-finger pan + pinch zoom around midpoint
+    cam.x-=(mx-pinch.mx)/cam.z;cam.y-=(my-pinch.my)/cam.z;
+    if(pinch.d>0)zoomAt(mx,my,d/pinch.d);
+    pinch.d=d;pinch.mx=mx;pinch.my=my;return;}
+  const sx=e.offsetX,sy=e.offsetY,wx=s2wX(sx),wy=s2wY(sy);
+  if(link.active){link.wx=wx;link.wy=wy;const h=hitNode(wx,wy);link.hover=(h>=0&&h!==link.from&&graph.nodes[h].type!=='INPUT')?h:-1;return;}
+  if(!drag)return;
+  if(drag.mode==='pan'){cam.x=drag.cx-(sx-drag.sx)/cam.z;cam.y=drag.cy-(sy-drag.sy)/cam.z;}
+  else if(drag.mode==='node'){const n=graph.nodes[drag.ni];if(n){n.x=wx-drag.ox;n.y=wy-drag.oy;drag.moved=true;}}
+}
+function onPointerUp(e){
+  pointers.delete(e.pointerId);
+  if(pointers.size<2)pinch=null;
+  if(link.active){
+    if(link.hover>=0)addBus(link.from,link.hover);
+    link.active=false;link.hover=-1;
+  }
+  if(drag&&drag.mode==='node'&&drag.moved)landscapeDirty=true;
+  drag=null;
+}
+function onWheel(e){e.preventDefault();
+  if(e.ctrlKey){zoomAt(e.offsetX,e.offsetY,Math.exp(-e.deltaY*0.01));return;} // trackpad pinch
+  zoomAt(e.offsetX,e.offsetY,Math.exp(-e.deltaY*0.0015));}
+
+function addBus(fi,ti){
+  if(fi===ti)return;
+  if(graph.buses.some(b=>b.fi===fi&&b.ti===ti)){toast('bus already exists');return;}
+  graph.buses.push(mkBus(fi,ti,0.5));topologyChanged();sliceA=-1;
+  select('bus',graph.buses[graph.buses.length-1].id);
+  toast('⚡ bus linked: '+graph.nodes[fi].sub+' → '+graph.nodes[ti].sub);
+}
+function addNode(type,wx,wy){
+  const subs=SUB_BY_TYPE[type];
+  const count=graph.nodes.filter(n=>n.type===type).length;
+  const sub=subs[count%subs.length];
+  if(wx==null){wx=s2wX(VW/2)+(Math.random()-.5)*80;wy=s2wY(VH/2)+(Math.random()-.5)*80;}
+  graph.nodes.push(mkNode(sub,wx,wy));topologyChanged();sliceA=-1;
+  select('node',graph.nodes[graph.nodes.length-1].id);
+  toast('＋ '+type+' / '+sub);
+}
+function deleteSelection(){
+  if(selection.kind==='bus'){const i=graph.buses.findIndex(b=>b.id===selection.id);if(i>=0){releaseBusParticles(graph.buses[i].id);graph.buses.splice(i,1);}}
+  else if(selection.kind==='node'){const ni=nodeIndexById(selection.id);if(ni<0)return;
+    const n=graph.nodes[ni];for(const p of n.queue)pool.release(p);n.queue.length=0;
+    for(let b=graph.buses.length-1;b>=0;b--){const bu=graph.buses[b];if(bu.fi===ni||bu.ti===ni){releaseBusParticles(bu.id);graph.buses.splice(b,1);}}
+    graph.nodes.splice(ni,1);
+    for(const bu of graph.buses){if(bu.fi>ni)bu.fi--;if(bu.ti>ni)bu.ti--;}
+  }else return;
+  select(null,-1);topologyChanged();sliceA=-1;lossViz&&lossViz.reset();toast('✖ deleted');
+}
+function releaseBusParticles(busId){pool.forEachActive(p=>{if(p.busId===busId)pool.release(p);});}
+
+const palette=document.getElementById('palette');let palPos=null;
+function showPalette(sx,sy,wx,wy){palPos={wx,wy};palette.style.display='flex';
+  palette.style.left=Math.min(sx,VW-170)+'px';palette.style.top=Math.min(sy,VH-170)+'px';}
+function hidePalette(){palette.style.display='none';}
+palette.addEventListener('click',e=>{const it=e.target.closest('[data-add]');if(!it)return;addNode(it.dataset.add,palPos&&palPos.wx,palPos&&palPos.wy);hidePalette();});
+
+cv.addEventListener('pointerdown',onPointerDown);
+cv.addEventListener('pointermove',onPointerMove);
+cv.addEventListener('pointerup',onPointerUp);
+cv.addEventListener('pointercancel',onPointerUp);
+cv.addEventListener('wheel',onWheel,{passive:false});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('dblclick',e=>{const wx=s2wX(e.offsetX),wy=s2wY(e.offsetY);if(hitNode(wx,wy)<0&&hitBus(wx,wy)<0)showPalette(e.offsetX,e.offsetY,wx,wy);});
+
+// ---- 10. URL-hash state codec ----------------------------------------------
+// #z.<base64url(deflate-raw(JSON))> when CompressionStream exists, else #j.<base64url(JSON)>
+function b64urlFromBytes(bytes){let s='';for(let i=0;i<bytes.length;i+=0x8000)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+function bytesFromB64url(str){const b64=str.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((str.length+3)%4);const bin=atob(b64);
+  const o=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)o[i]=bin.charCodeAt(i);return o;}
+async function pipeBytes(bytes,stream){return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());}
+const hasCompression=()=>typeof CompressionStream!=='undefined'&&typeof DecompressionStream!=='undefined';
+async function encodeState(obj){const json=new TextEncoder().encode(JSON.stringify(obj));
+  if(hasCompression()){try{return 'z.'+b64urlFromBytes(await pipeBytes(json,new CompressionStream('deflate-raw')));}catch(_){}}
+  return 'j.'+b64urlFromBytes(json);}
+async function decodeState(hash){const h=(hash||'').replace(/^#/,'');if(!h)return null;
+  const tag=h.slice(0,2);let bytes=bytesFromB64url(h.slice(2));
+  if(tag==='z.'){if(!hasCompression())throw new Error('compressed link needs DecompressionStream');bytes=await pipeBytes(bytes,new DecompressionStream('deflate-raw'));}
+  else if(tag!=='j.')throw new Error('unknown hash format');
+  return JSON.parse(new TextDecoder().decode(bytes));}
+
+// ---- Graph (de)serialization ------------------------------------------------
+const r3=v=>Math.round(v*1000)/1000;
+function serializeGraph(){
+  return {format:'nexus-weaver',version:'1.0.0',
+    nodes:graph.nodes.map(n=>({id:n.id,type:n.type,sub:n.sub,x:Math.round(n.x),y:Math.round(n.y)})),
+    links:graph.buses.map(b=>({from:graph.nodes[b.fi].id,to:graph.nodes[b.ti].id,weight:r3(b.w),latency:b.lat,bandwidth:b.bw})),
+    targets:targets.map(r3),spawnMult,lr,
+    kernel:els.kernelSrc.value,
+    specs:SUBSPEC};
+}
+function loadGraph(st){
+  if(!st||!Array.isArray(st.nodes)||!Array.isArray(st.links))throw new Error('invalid graph state');
+  pool.forEachActive(p=>pool.release(p));
+  graph.nodes.length=0;graph.buses.length=0;
+  const idx=new Map();let maxId=0;
+  for(const n of st.nodes){if(!SUBSPEC[n.sub])continue;const nn=mkNode(n.sub,+n.x||0,+n.y||0);nn.id=n.id;maxId=Math.max(maxId,n.id);idx.set(n.id,graph.nodes.length);graph.nodes.push(nn);}
+  NODE_SEQ=maxId+1;
+  for(const l of st.links){const fi=idx.get(l.from),ti=idx.get(l.to);if(fi==null||ti==null)continue;graph.buses.push(mkBus(fi,ti,clamp(+l.weight||0.5,W_MIN,W_MAX),+l.bandwidth||26,+l.latency||0.4));}
+  if(Array.isArray(st.targets))targets=st.targets.map(Number);
+  if(st.spawnMult){spawnMult=+st.spawnMult;els.spawn.value=spawnMult;els.spawnVal.textContent=spawnMult.toFixed(1)+'x';}
+  if(st.lr){lr=+st.lr;els.lr.value=lr;els.lrVal.textContent=lr.toFixed(3);}
+  if(typeof st.kernel==='string'){els.kernelSrc.value=st.kernel;updateGutter();hotReload(false);}
+  topologyChanged();sliceA=-1;lossHist.length=0;epoch=0;lossStart=null;lastLoss=null;lossViz&&lossViz.reset();
+  select(null,-1);
+}
+
+// ---- 11. Compile & deploy payload emitters ---------------------------------
+// (b) standalone runtime: createNexusGraph(canvas, graphJSON) -> {step, stop, state}
+// Written without line comments so whitespace-collapsing minification is safe.
+const RUNTIME_SRC=`function createNexusGraph(canvas,G,opts){
+  opts=opts||{};var ctx=canvas.getContext('2d');var S=G.specs;var W=160,H=60;
+  var N=G.nodes.map(function(n){return {id:n.id,t:n.type,s:n.sub,x:n.x,y:n.y,q:[],acc:0,bt:0};});
+  var ix={};N.forEach(function(n,i){ix[n.id]=i;});
+  var L=G.links.map(function(l){return {f:ix[l.from],t:ix[l.to],w:l.weight,lat:l.latency};});
+  var P=[],delivered=0,dropped=0,time=0,raf=0,last=0;
+  var K=null;try{K=new Function('p','node','t','Math','"use strict";'+G.kernel);}catch(e){K=null;}
+  function kern(p,n){if(!K)return;try{K(p,{type:n.t,sub:n.s,id:n.id},time,Math);}catch(e){K=null;}}
+  function route(i,p){var o=[],ws=0;for(var k=0;k<L.length;k++)if(L[k].f===i){o.push(k);ws+=L[k].w;}
+    if(!o.length){if(N[i].t==='OUTPUT')delivered++;return;}
+    var r=Math.random()*ws,pk=o[o.length-1];for(var j=0;j<o.length;j++){r-=L[o[j]].w;if(r<=0){pk=o[j];break;}}
+    p.b=pk;p.u=0;p.d=L[pk].lat*(0.75+Math.random()*0.5)/Math.max(0.1,p.speed||1);P.push(p);}
+  function step(dt){time+=dt;
+    N.forEach(function(n,i){var sp=S[n.s];if(n.t==='INPUT'){n.acc+=sp.rate*dt;while(n.acc>=1){n.acc-=1;route(i,{value:1+Math.random()*2,hue:sp.hue,speed:1});}return;}
+      n.acc+=sp.mu*dt;while(n.acc>=1&&n.q.length){n.acc-=1;var p=n.q.shift();kern(p,n);if(p.drop){dropped++;continue;}
+        if(n.t==='OUTPUT')delivered++;else route(i,p);}if(!n.q.length)n.acc=Math.min(n.acc,1);});
+    for(var k=P.length-1;k>=0;k--){var p=P[k];p.u+=dt/Math.max(0.04,p.d);if(p.u>=1){P.splice(k,1);var t=N[L[p.b].t];
+      if(t.q.length>=S[t.s].cap)dropped++;else t.q.push(p);}}}
+  function draw(){var w=canvas.width,h=canvas.height;ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,w,h);
+    var x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;N.forEach(function(n){x0=Math.min(x0,n.x-W);x1=Math.max(x1,n.x+W);y0=Math.min(y0,n.y-H);y1=Math.max(y1,n.y+H);});
+    var z=Math.min(w/(x1-x0),h/(y1-y0)),ox=(w-(x1-x0)*z)/2-x0*z,oy=(h-(y1-y0)*z)/2-y0*z;ctx.save();ctx.setTransform(z,0,0,z,ox,oy);
+    function bz(l,u){var a=N[l.f],b=N[l.t],ax=a.x+W/2,bx=b.x-W/2,dx=Math.max(60,Math.abs(bx-ax)/2),v=1-u;
+      return [v*v*v*ax+3*v*v*u*(ax+dx)+3*v*u*u*(bx-dx)+u*u*u*bx,v*v*v*a.y+3*v*v*u*a.y+3*v*u*u*b.y+u*u*u*b.y];}
+    ctx.shadowBlur=12;ctx.shadowColor='#00ff87';ctx.strokeStyle='#00ff87';L.forEach(function(l){ctx.lineWidth=1+l.w*6;ctx.beginPath();for(var u=0;u<=1.001;u+=0.05){var q=bz(l,u);u?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);}ctx.stroke();});
+    P.forEach(function(p){var q=bz(L[p.b],p.u);ctx.fillStyle='hsl('+p.hue+',100%,62%)';ctx.shadowColor=ctx.fillStyle;ctx.beginPath();ctx.arc(q[0],q[1],4,0,6.3);ctx.fill();});
+    var col={INPUT:'#60efff',COMPUTE:'#00ff87',MEMORY:'#ffcc00',OUTPUT:'#ff0080'};
+    N.forEach(function(n){ctx.shadowColor=col[n.t];ctx.strokeStyle=col[n.t];ctx.fillStyle='#06080e';ctx.lineWidth=2;ctx.fillRect(n.x-W/2+5,n.y-H/2,W-10,H);ctx.strokeRect(n.x-W/2+5,n.y-H/2,W-10,H);
+      ctx.fillStyle='#eafff4';ctx.font='bold 14px monospace';ctx.fillText(n.s,n.x-W/2+14,n.y+5);});ctx.restore();}
+  function loop(t){var dt=Math.min(0.05,((t-(last||t))/1000));last=t;step(dt);draw();raf=requestAnimationFrame(loop);}
+  if(opts.autoplay!==false)raf=requestAnimationFrame(loop);
+  return {step:step,draw:draw,stop:function(){cancelAnimationFrame(raf);},stats:function(){return {time:time,delivered:delivered,dropped:dropped,inFlight:P.length};}};
+}`;
+// (c) pure step(state, dt): fluid-level simulation; returns a NEW state, never mutates input.
+const STEP_SRC=`function step(state,dt){
+  var S=state.specs,N=state.nodes,L=state.links,lvl=state.levels||{},out={},ws={},inflow={},stats={delivered:0,dropped:0};
+  N.forEach(function(n){ws[n.id]=0;inflow[n.id]=0;});L.forEach(function(l){ws[l.from]+=l.weight;});
+  N.forEach(function(n){var sp=S[n.sub],q=lvl[n.id]||0;var o;
+    if(n.type==='INPUT'){o=sp.rate*dt;}else{o=Math.min(q,sp.mu*dt);}
+    out[n.id]=o;lvl[n.id]=n.type==='INPUT'?0:q-o;
+    if(n.type==='OUTPUT')stats.delivered+=o;else if(!ws[n.id])stats.dropped+=o;});
+  L.forEach(function(l){var f=ws[l.from]?out[l.from]*l.weight/ws[l.from]:0;var cap=l.bandwidth*dt;if(f>cap){stats.dropped+=f-cap;f=cap;}inflow[l.to]+=f;});
+  var nl={};N.forEach(function(n){var q=(lvl[n.id]||0)+inflow[n.id],c=S[n.sub].cap||0;if(n.type!=='INPUT'&&q>c){stats.dropped+=q-c;q=c;}nl[n.id]=n.type==='INPUT'?0:q;});
+  return Object.assign({},state,{levels:nl,time:(state.time||0)+dt,lastStats:stats});
+}`;
+function minifyJS(src){return src.replace(/\n\s*/g,'').replace(/\s*([{}();,=+\-*/<>?:|&!])\s*/g,'$1').replace(/\breturn\{/g,'return {');}
+let lastPayloads=null;
+function compilePayload(){
+  const st=serializeGraph();
+  const json=JSON.stringify(st,null,2);
+  const js='/* NEXUS Weaver payload — createNexusGraph(canvas, GRAPH). React: useEffect(()=>{const g=createNexusGraph(ref.current,GRAPH);return g.stop;},[]) */\n'+
+    'var GRAPH='+JSON.stringify(st)+';\n'+minifyJS(RUNTIME_SRC)+';';
+  const step='/* pure step(state, dt) -> new state (fluid approximation). state = GRAPH JSON + {levels,time}. No DOM, no mutation. */\n'+minifyJS(STEP_SRC)+';';
+  lastPayloads={json,js,step};
+  showPayload();
+  logConsole('◆ compiled payload: JSON '+json.length+'B · runtime '+js.length+'B · step '+step.length+'B','ok');
+  return lastPayloads;
+}
+function showPayload(){if(!lastPayloads)compilePayload();els.payloadOut.value=lastPayloads[els.payloadKind.value];}
+async function copyText(txt,label){
+  try{await navigator.clipboard.writeText(txt);toast('⧉ copied '+label);}
+  catch(_){els.payloadOut.value=txt;els.payloadOut.focus();els.payloadOut.select();
+    try{document.execCommand('copy');toast('⧉ copied '+label);}catch(__){toast('select + copy manually (clipboard blocked)');}}
+}
+function downloadJSON(){
+  const st=serializeGraph();const blob=new Blob([JSON.stringify(st,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='nexus-weaver-graph.json';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);toast('⇩ nexus-weaver-graph.json');
+}
+async function shareLink(){
+  const st=serializeGraph();delete st.specs; // specs are built-in; keep links short
+  const enc=await encodeState(st);
+  const url=location.href.split('#')[0]+'#'+enc;
+  history.replaceState(null,'',url);
+  await copyText(url,'share link ('+enc.length+' chars, '+(enc[0]==='z'?'deflate':'base64')+')');
+  return url;
+}
+
+// ---- 12. UI wiring ----------------------------------------------------------
+const $=id=>document.getElementById(id);
+const els={kernelSrc:$('kernelSrc'),gutter:$('gutter'),console:$('console'),btnTrain:$('btnTrain'),btnPause:$('btnPause'),
+  lpCanvas:$('lpCanvas'),lossCanvas:$('lossCanvas'),lossAxes:$('lossAxes'),payloadOut:$('payloadOut'),payloadKind:$('payloadKind'),
+  lr:$('lr'),lrVal:$('lrVal'),spawn:$('spawn'),spawnVal:$('spawnVal'),targets:$('targets'),inspector:$('inspector'),
+  mLoss:$('mLoss'),mThru:$('mThru'),mErr:$('mErr'),mStab:$('mStab'),mPwr:$('mPwr'),mPart:$('mPart'),mFps:$('mFps')};
+
+const consoleLines=[];let consoleErrors=0;
+function logConsole(msg,kind){
+  if(kind==='err')consoleErrors++;
+  consoleLines.push({msg,kind});if(consoleLines.length>40)consoleLines.shift();
+  const el=els.console;const d=document.createElement('div');d.className='c-'+(kind||'dim');d.textContent=msg;el.appendChild(d);
+  while(el.childNodes.length>40)el.removeChild(el.firstChild);el.scrollTop=el.scrollHeight;
+}
+let toastT=0;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1600);}
+let lastOverflowFx=0;
+function flashScreen(shake){const f=$('flash');f.classList.add('show');setTimeout(()=>f.classList.remove('show'),140);
+  if(shake){shakeT=0.3;}}
+function triggerOverflow(n){const t=now();if(t-lastOverflowFx<900)return;lastOverflowFx=t;flashScreen(true);
+  logConsole('⚠ BUFFER OVERFLOW @ '+n.sub+' #'+n.id+' — packet dropped','warn');}
+
+function updateGutter(){const n=els.kernelSrc.value.split('\n').length;let s='';for(let i=1;i<=n;i++)s+=i+'\n';els.gutter.textContent=s;}
+els.kernelSrc.addEventListener('input',updateGutter);
+els.kernelSrc.addEventListener('scroll',()=>{els.gutter.style.transform='translateY('+(-els.kernelSrc.scrollTop)+'px)';});
+els.kernelSrc.addEventListener('keydown',e=>{
+  if(e.key==='Tab'){e.preventDefault();const s=els.kernelSrc.selectionStart,en=els.kernelSrc.selectionEnd,v=els.kernelSrc.value;
+    els.kernelSrc.value=v.slice(0,s)+'  '+v.slice(en);els.kernelSrc.selectionStart=els.kernelSrc.selectionEnd=s+2;updateGutter();}
+});
+$('presetSel').addEventListener('change',e=>{els.kernelSrc.value=PRESETS[e.target.value];updateGutter();hotReload();});
+$('btnReload').addEventListener('click',()=>hotReload());
+
+function syncTargetsUI(){
+  if(!els||!els.targets)return;
+  const box=els.targets;box.innerHTML='';
+  outputOrder.forEach((ni,k)=>{const n=graph.nodes[ni];
+    const row=document.createElement('div');row.style.marginBottom='5px';
+    row.innerHTML='<div class="metric"><span class="k" style="color:var(--pink)">'+n.sub+' #'+n.id+'</span><span class="v"><span data-tv>'+(targets[k]||0).toFixed(2)+'</span> <span class="c-dim" data-mv></span></span></div>'+
+      '<input type="range" min="0" max="1" step="0.01" value="'+(targets[k]||0)+'" style="width:100%">';
+    const inp=row.querySelector('input');
+    inp.addEventListener('input',()=>{targets[k]=+inp.value;row.querySelector('[data-tv]').textContent=(+inp.value).toFixed(2);landscapeDirty=true;plateau=0;});
+    box.appendChild(row);});
+}
+function updateTargetMeasures(){const rows=els.targets.children;let tsum=0;for(const t of targets)tsum+=t;
+  for(let k=0;k<rows.length&&k<tele.outShare.length;k++){const mv=rows[k].querySelector('[data-mv]');
+    if(mv)mv.textContent='· got '+(tele.outShare[k]*100).toFixed(0)+'% / want '+(tsum>0?targets[k]/tsum*100:0).toFixed(0)+'%';}}
+
+function updateInspector(){
+  const el=els.inspector;
+  if(selection.kind==='node'){const ni=nodeIndexById(selection.id);if(ni<0){el.innerHTML='';return;}const n=graph.nodes[ni];const sp=SUBSPEC[n.sub];
+    const opts=SUB_BY_TYPE[n.type].map(s=>'<option'+(s===n.sub?' selected':'')+'>'+s+'</option>').join('');
+    el.innerHTML='<div class="metric"><span class="k">NODE #'+n.id+'</span><span class="v" style="color:'+TYPE_COLOR[n.type]+'">'+n.type+'</span></div>'+
+      '<div class="row" style="margin:4px 0"><select id="subSel">'+opts+'</select><button class="btn pink" id="btnDel">✖ DEL</button></div>'+
+      '<div class="c-dim">'+(sp.note||'')+(sp.mu?' · μ='+sp.mu+'/s':'')+(sp.cap?' · cap '+sp.cap:'')+(sp.rate?' · '+sp.rate+' pkt/s':'')+(sp.power?' · '+sp.power+'W':'')+'</div>';
+    $('subSel').addEventListener('change',e=>{n.sub=e.target.value;n.hue=SUBSPEC[n.sub].hue||150;topologyChanged();updateInspector();});
+    $('btnDel').addEventListener('click',deleteSelection);
+  }else if(selection.kind==='bus'){const bu=busMap.get(selection.id);if(!bu){el.innerHTML='';return;}
+    el.innerHTML='<div class="metric"><span class="k">BUS</span><span class="v" style="color:var(--cyan)">'+busLabel(bu)+'</span></div>'+
+      '<label class="metric"><span class="k">weight</span><span class="v" id="bwV">'+bu.w.toFixed(2)+'</span></label><input id="bwR" type="range" min="'+W_MIN+'" max="1" step="0.01" value="'+bu.w+'" style="width:100%">'+
+      '<label class="metric"><span class="k">latency s</span><span class="v" id="blV">'+bu.lat.toFixed(2)+'</span></label><input id="blR" type="range" min="0.05" max="1.5" step="0.05" value="'+bu.lat+'" style="width:100%">'+
+      '<label class="metric"><span class="k">bandwidth pkt/s</span><span class="v" id="bbV">'+bu.bw+'</span></label><input id="bbR" type="range" min="2" max="60" step="1" value="'+bu.bw+'" style="width:100%">'+
+      '<div class="row" style="margin-top:6px"><button class="btn pink" id="btnDel">✖ DELETE BUS</button></div>';
+    $('bwR').addEventListener('input',e=>{bu.w=+e.target.value;$('bwV').textContent=bu.w.toFixed(2);landscapeDirty=true;});
+    $('blR').addEventListener('input',e=>{bu.lat=+e.target.value;$('blV').textContent=bu.lat.toFixed(2);});
+    $('bbR').addEventListener('input',e=>{bu.bw=+e.target.value;$('bbV').textContent=bu.bw;landscapeDirty=true;});
+    $('btnDel').addEventListener('click',deleteSelection);
+  }else el.innerHTML='<div class="c-dim">Select a node or bus to inspect. Drag from an output port (right) to an input port (left) to link. Double-click empty space to add. Delete removes.</div>';
+}
+
+function setPaused(p){paused=p;els.btnPause.textContent=p?'▶ RESUME':'⏸ PAUSE';els.btnPause.classList.toggle('on',p);}
+els.btnPause.addEventListener('click',()=>setPaused(!paused));
+els.btnTrain.addEventListener('click',()=>setTraining(!training));
+$('btnFit').addEventListener('click',fitView);
+$('mTrain').addEventListener('click',()=>setTraining(!training));
+document.querySelectorAll('#leftPanel [data-add]').forEach(b=>b.addEventListener('click',()=>addNode(b.dataset.add)));
+els.lr.addEventListener('input',()=>{lr=+els.lr.value;els.lrVal.textContent=lr.toFixed(3);});
+els.spawn.addEventListener('input',()=>{spawnMult=+els.spawn.value;els.spawnVal.textContent=spawnMult.toFixed(1)+'x';landscapeDirty=true;plateau=0;});
+$('btnCompile').addEventListener('click',compilePayload);
+$('btnShare').addEventListener('click',shareLink);
+els.payloadKind.addEventListener('change',showPayload);
+$('btnCopy').addEventListener('click',()=>{if(!lastPayloads)compilePayload();copyText(lastPayloads[els.payloadKind.value],els.payloadKind.selectedOptions[0].text);});
+$('btnDownload').addEventListener('click',downloadJSON);
+
+// Keyboard
+window.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();hotReload();return;}
+  const tag=(document.activeElement&&document.activeElement.tagName)||'';
+  if(tag==='TEXTAREA'||tag==='INPUT'||tag==='SELECT')return;
+  if(e.code==='Space'){e.preventDefault();setPaused(!paused);}
+  else if(e.key==='t'||e.key==='T')setTraining(!training);
+  else if(e.key==='f'||e.key==='F')fitView();
+  else if(e.key>='1'&&e.key<='4'){addNode(['INPUT','COMPUTE','MEMORY','OUTPUT'][+e.key-1]);}
+  else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();deleteSelection();}
+  else if(e.key==='Escape'){select(null,-1);hidePalette();}
+});
+
+// Mobile bottom sheet / tab bar
+let activeTab='canvas';
+function setTab(t){activeTab=(activeTab===t&&t!=='canvas')?'canvas':t;
+  document.querySelectorAll('#tabbar .tb').forEach(b=>b.classList.toggle('active',b.dataset.tab===activeTab));
+  document.querySelectorAll('.panel[data-sheet]').forEach(p=>p.classList.toggle('sheet-active',p.dataset.sheet===activeTab));
+  if(activeTab==='loss'){landscapeDirty=true;}}
+document.querySelectorAll('#tabbar .tb').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
+
+// HUD (throttled to ~6Hz so DOM writes never cost frames)
+let hudT=0;
+function updateHUD(fps){
+  computeTelemetry();
+  const lt=modelLossTerms();
+  els.mLoss.textContent=lt.loss.toFixed(4)+(lossStart!=null?'  ('+((lt.loss/lossStart-1)*100).toFixed(0)+'%)':'');
+  els.mLoss.title='model loss = 4·dist² + 1.5·drop + 0.25·power  | dist '+lt.dist.toFixed(4)+' drop '+lt.dropFrac.toFixed(3)+' pwr '+lt.pw.toFixed(3);
+  els.mThru.textContent=tele.thru.toFixed(1)+' pkt/s';
+  els.mErr.textContent=(tele.err*100).toFixed(1)+'%';
+  els.mStab.textContent=(tele.stab*100).toFixed(0)+'%';
+  els.mPwr.textContent=tele.power.toFixed(2)+' W';
+  els.mPart.textContent=pool.activeCount+' / '+pool.cap+' ('+(pool.utilization*100).toFixed(1)+'%)';
+  els.mFps.textContent=epoch+' · '+fps.toFixed(0)+' fps';
+  updateTargetMeasures();
+}
+
+// ---- Main loop ---------------------------------------------------------------
+let lastT=0, frames=0, fpsT=0, fps=60, lastLandscape=0;
+const SIM_DT=1/120;
+let simAcc=0;
+function frame(t){
+  requestAnimationFrame(frame);
+  const dt=Math.min(0.05,lastT?(t-lastT)/1000:0.016);lastT=t;
+  frames++;fpsT+=dt;if(fpsT>=0.5){fps=lerp(fps,frames/fpsT,0.6);frames=0;fpsT=0;}
+  try{
+    if(!paused){simAcc+=dt;let n=0;while(simAcc>=SIM_DT&&n<8){simStep(SIM_DT);simAcc-=SIM_DT;n++;}if(n>=8)simAcc=0;}
+    if(training){trainAcc+=dt;if(trainAcc>=EPOCH_DT){trainAcc=0;trainEpoch();}}
+    render(dt);
+    hudT+=dt;if(hudT>0.16){hudT=0;updateHUD(fps);renderSpark();}
+    const lpVisible=els.lpCanvas.offsetParent!==null;
+    if(lpVisible&&(t-lastLandscape>90)){lastLandscape=t;renderLandscape();}
+  }catch(err){ // absolute last line of defense — never let the loop die
+    if(!frame._errs)frame._errs=0; if(frame._errs++<5)logConsole('✖ loop fault contained: '+err.message,'err');
+  }
+  window.__weaver.frames++;
+}
+
+// ---- Boot ----------------------------------------------------------------------
+function boot(){
+  const el=$('boot');if(!el)return;
+  const lines=el.querySelectorAll('.bl');let done=false;
+  const finish=()=>{if(done)return;done=true;el.style.transition='opacity .25s';el.style.opacity='0';setTimeout(()=>el.remove(),260);};
+  lines.forEach((l,i)=>setTimeout(()=>{l.style.opacity='1';},90+i*160));
+  setTimeout(finish,1350);
+  el.addEventListener('pointerdown',finish);window.addEventListener('keydown',finish,{once:true});
+  if(sessionStorage.getItem('weaver-booted')||/[?&]noboot/.test(location.search))finish();
+  sessionStorage.setItem('weaver-booted','1');
+}
+
+// Test / automation hook (read-only telemetry + a few actions). Harmless in prod.
+window.__weaver={frames:0,get epoch(){return epoch;},get loss(){return modelLoss(null);},get training(){return training;},
+  get lossHist(){return lossHist.slice();},get tele(){return Object.assign({},tele);},get pool(){return {active:pool.activeCount,cap:pool.cap,exhausted:pool.exhausted};},
+  get kernel(){return {runtimeErrs:kernelRuntimeErrs,reverts:kernelReverts,consoleErrors,source:kernelSource};},
+  get consoleText(){return consoleLines.map(l=>l.msg).join('\n');},
+  serialize:serializeGraph,compile:compilePayload,share:shareLink,decode:decodeState,load:loadGraph,
+  ports(i){const n=graph.nodes[i];return {out:{x:w2sX(n.x+NODE_W/2),y:w2sY(n.y)},in:{x:w2sX(n.x-NODE_W/2),y:w2sY(n.y)},c:{x:w2sX(n.x),y:w2sY(n.y)}};},
+  get cam(){return Object.assign({},cam);},get paused(){return paused;},get selection(){return Object.assign({},selection);},
+  get counts(){return {nodes:graph.nodes.length,buses:graph.buses.length,delivered:totalDelivered,dropped:totalDropped,spawned:totalSpawned};}};
+
+async function init(){
+  resize();buildSprites();
+  window.addEventListener('resize',()=>{resize();});
+  els.kernelSrc.value=PRESETS.passthrough;updateGutter();hotReload(false);
+  loadDefaultScene();
+  let fromHash=false;
+  if(location.hash.length>3){
+    try{const st=await decodeState(location.hash);st.specs=SUBSPEC;loadGraph(st);fromHash=true;logConsole('🔗 graph restored from URL hash ('+graph.nodes.length+' nodes, '+graph.buses.length+' buses)','ok');}
+    catch(e){logConsole('⚠ could not decode URL hash: '+e.message+' — loaded default scene','warn');loadDefaultScene();}
+  }
+  if(!fromHash)logConsole('weaver online · default scene: 11 nodes / 16 buses · press T to train','dim');
+  pickSlice();fitView();updateInspector();
+  if(window.innerWidth<=760)setTab('canvas');
+  boot();
+  requestAnimationFrame(frame);
+}
+init();
+})();
+</script>
+</body>
+</html>
